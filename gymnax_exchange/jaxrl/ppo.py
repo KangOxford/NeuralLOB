@@ -40,7 +40,8 @@ jax.numpy.set_printoptions(linewidth=250)
 
 
 
-wandbOn = True # False
+wandbOn = False
+# wandbOn = True 
 if wandbOn:
     import wandb
 
@@ -766,22 +767,26 @@ if __name__ == "__main__":
         "ADAM_EPS": 1e-5,  # 1e-4, 1e-6
         
         "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": 2, # 2 fix random episode #-1,
+        "WINDOW_INDEX": -1, # 2 fix random episode #-1,
+        # "WINDOW_INDEX": 2, # 2 fix random episode #-1,
         "DEBUG": True,
         
-        "TASKSIDE": "random", # "random", "buy", "sell"
+        "TASKSIDE": "sell", # "random", "buy", "sell"
+        # "TASKSIDE": "random", # "random", "buy", "sell"
         "REWARD_LAMBDA": 1., #0.001,
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         "TASK_SIZE": 100, # 500,
         "EPISODE_TIME": 60 * 5, # time in seconds
-        "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
+        "DATA_TYPE": "fixed_steps", # "fixed_time", "fixed_steps"
+        # "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "CONT_ACTIONS": False,  # True
         "JOINT_ACTOR_CRITIC_NET": True,  # True, False
         "ACTOR_STD": "state_dependent",  # 'state_dependent', 'param', 'fixed'
         "REDUCE_ACTION_SPACE_BY": 10,
       
-        "ATFOLDER": "./training_oneDay/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
+        "ATFOLDER": "/homes/80/kang/AlphaTrade/AMZN_data/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
+        # "ATFOLDER": "./training_oneDay/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
         # "ATFOLDER": "./training_oneMonth/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
         "RESULTS_FILE": "training_runs/results_file_"+f"{timestamp}",  # "/homes/80/kang/AlphaTrade/results_file_"+f"{timestamp}",
         "CHECKPOINT_DIR": "training_runs/checkpoints_"+f"{timestamp}",  # "/homes/80/kang/AlphaTrade/checkpoints_"+f"{timestamp}",

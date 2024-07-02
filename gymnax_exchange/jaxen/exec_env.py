@@ -687,8 +687,14 @@ class ExecutionEnv(BaseLOBEnv):
         
         # def market_quant_price(price_levels: jax.Array, state: EnvState, action: jax.Array):
         #     mkt_quant = state.task_to_execute - state.quant_executed
-        #     quants = jnp.asarray((mkt_quant, 0, 0, 0), jnp.int32) 
-        #     return quants, jnp.asarray((price_levels[-1], -1, -1, -1), jnp.int32)
+        #     if self.n_actions == 4:
+        #         quants = jnp.asarray((mkt_quant, 0, 0, 0), jnp.int32) 
+        #         return quants, jnp.asarray((price_levels[-1], -1, -1, -1), jnp.int32)
+        #     elif self.n_actions == 2:
+        #         quants = jnp.asarray((mkt_quant, 0,), jnp.int32) 
+        #         return quants, jnp.asarray((price_levels[-1], -1), jnp.int32)
+        #     else: raise NotImplementedError
+                
         
         def buy_task_prices(best_ask, best_bid):
             # FT = best_ask

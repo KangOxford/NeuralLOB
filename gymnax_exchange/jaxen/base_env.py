@@ -174,14 +174,26 @@ class BaseLOBEnv(environment.Environment):
         self.customIDCounter=0
         self.trader_unique_id=job.INITID+1
         self.tick_size=100
-        self.start_resolution=60 #Interval in seconds at which eps start
+        self.start_resolution=10 #Interval in seconds at which eps start
+        # self.start_resolution=60 #Interval in seconds at which eps start
         loader=LoadLOBSTER_resample(alphatradePath,
                                     self.book_depth,
                                     ep_type,
                                     window_length=self.sliceTimeWindow,
                                     n_msg_per_step=self.stepLines,
                                     window_resolution=self.start_resolution) 
-        msgs,starts,ends,books,max_messages_arr=loader.run_loading()
+        message_days,day_end_position,msgs,starts,ends,books,max_messages_arr=loader.run_loading()
+        
+        
+        
+        # List of jnp.Arrays
+        arrays = [message_days, day_end_position, msgs, starts, ends, books, max_messages_arr]
+        # Convert jnp.Arrays to numpy arrays using map
+        numpy_arrays = list(map(np.array, arrays))
+        # Save numpy arrays to a file using a dictionary comprehension
+        np.savez(alphatradePath+'/arrays.npz', **{f'array_{i}': array for i, array in enumerate(numpy_arrays)})
+        # breakpoint()
+        # jax.debug.breakpoint()
         self.max_messages_in_episode_arr = max_messages_arr
         self.messages=msgs #Is different to trad. base: all msgs concat. 
         self.books=books

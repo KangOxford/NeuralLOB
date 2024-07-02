@@ -38,6 +38,7 @@ import itertools
 import pandas as pd
 from pandas.errors import SettingWithCopyWarning
 import numpy as np
+from tqdm import tqdm
 
 from jax import numpy as jnp
 import jax
@@ -102,9 +103,13 @@ class LoadLOBSTER():
                                             (Window, Step, Message, Features)
         """
         message_days, orderbook_days = self._load_files()
+        print("Files loaded")
+        breakpoint()
+        
         pairs = [self._pre_process_msg_ob(msg,ob) 
                  for msg,ob 
                  in zip(message_days,orderbook_days)]
+        breakpoint()
         message_days, orderbook_days = zip(*pairs)
         slicedCubes_withOB_list = [self._slice_day_no_overlap(msg_day,ob_day) 
                                    for msg_day,ob_day 
@@ -157,8 +162,10 @@ class LoadLOBSTER():
         readFromPath = lambda data_path: sorted([f for f in listdir(data_path) if isfile(join(data_path, f))])
         messageFiles, orderbookFiles = readFromPath(self.messagePath), readFromPath(self.orderbookPath)
         dtype = {0: float,1: int, 2: int, 3: int, 4: int, 5: int}
-        messageCSVs = [pd.read_csv(self.messagePath + file, usecols=range(6), dtype=dtype, header=None) for file in messageFiles if file[-3:] == "csv"]
-        orderbookCSVs = [pd.read_csv(self.orderbookPath + file, header=None) for file in orderbookFiles if file[-3:] == "csv"]
+        messageCSVs = [pd.read_csv(self.messagePath + file, usecols=range(6), dtype=dtype, header=None) \
+            for file in tqdm(messageFiles,desc='load message csvs') if file[-3:] == "csv"]
+        orderbookCSVs = [pd.read_csv(self.orderbookPath + file, header=None)\
+            for file in tqdm(orderbookFiles, desc='load orderbook csvs') if file[-3:] == "csv"]
         return messageCSVs, orderbookCSVs
     
     def _pre_process_msg_ob(self,message_day,orderbook_day):
@@ -325,12 +332,12 @@ class LoadLOBSTER_resample():
                  alphatradepath,
                  n_Levels=10,
                  type_="fixed_time",
-                 window_length=1800,
-                 window_resolution=60,
+                 window_length=100,
+                 window_resolution=1,
                  n_msg_per_step=100):
         self.atpath=alphatradepath
-        self.messagePath = alphatradepath+"/data/Flow_"+str(n_Levels)+"/"
-        self.orderbookPath = alphatradepath+"/data/Book_"+str(n_Levels)+"/"
+        self.messagePath = alphatradepath+"/Flow_"+str(n_Levels)+"/"
+        self.orderbookPath = alphatradepath+"/Book_"+str(n_Levels)+"/"
         self.window_type=type_
         self.window_length=window_length
         self.window_resolution=window_resolution
@@ -350,18 +357,21 @@ class LoadLOBSTER_resample():
                                             (Messages, Features)
                 max_window_size (Int)
         """
-        message_days, orderbook_days = self._load_files()
+        raw_message_days, raw_orderbook_days = self._load_files()
         pairs = [self._pre_process_msg_ob(msg,ob) 
                  for msg,ob 
-                 in zip(message_days,orderbook_days)]
+                 in tqdm(zip(raw_message_days,raw_orderbook_days))]
         message_days, orderbook_days = zip(*pairs)
         
-
+        # breakpoint()
+        
+        # self._get_inits_day(msg_day,ob_day) 
+        # msg_day,ob_day  = list(zip(message_days,orderbook_days))[208]
         #Get the 'window' indices of starts & ends for each of the days.
         #Get the lengths of all possible windows given those starts.
         pairs = [self._get_inits_day(msg_day,ob_day) 
                                    for msg_day,ob_day 
-                                   in zip(message_days,orderbook_days)]
+                                   in tqdm(zip(message_days,orderbook_days))]
         msgs,starts,ends,obs = zip(*pairs)
         
         #Concatenate the data from all the days.
@@ -375,7 +385,12 @@ class LoadLOBSTER_resample():
         (msgs,
          max_msgs_in_windows_arr)=self._pad_last_ep(msgs,
                                                        max_msgs_in_windows_arr)
-        return msgs,starts,ends,obs,max_msgs_in_windows_arr
+        # breakpoint()
+        # aa = [m.shape for m in raw_message_days]
+        # len([a for a in aa if a[1]!=8])
+        new_message_days = jnp.concatenate([m.to_numpy() for m in raw_message_days])
+        day_end_position = jnp.stack([m.shape[0] for m in raw_message_days])
+        return new_message_days,day_end_position,msgs,starts,ends,obs,max_msgs_in_windows_arr
     
     def _pad_last_ep(self,messages,max_msgs_in_windows_arr):
         length_last_ep=max_msgs_in_windows_arr[-1]
@@ -395,8 +410,12 @@ class LoadLOBSTER_resample():
         readFromPath = lambda data_path: sorted([f for f in listdir(data_path) if isfile(join(data_path, f))])
         messageFiles, orderbookFiles = readFromPath(self.messagePath), readFromPath(self.orderbookPath)
         dtype = {0: float,1: int, 2: int, 3: int, 4: int, 5: int}
-        messageCSVs = [pd.read_csv(self.messagePath + file, usecols=range(6), dtype=dtype, header=None) for file in messageFiles if file[-3:] == "csv"]
-        orderbookCSVs = [pd.read_csv(self.orderbookPath + file, header=None) for file in orderbookFiles if file[-3:] == "csv"]
+        # messageCSVs = [pd.read_csv(self.messagePath + file, usecols=range(6), dtype=dtype, header=None) for file in messageFiles if file[-3:] == "csv"]
+        # orderbookCSVs = [pd.read_csv(self.orderbookPath + file, header=None) for file in orderbookFiles if file[-3:] == "csv"]
+        messageCSVs = [pd.read_csv(self.messagePath + file, usecols=range(6), dtype=dtype, header=None) \
+            for file in tqdm(messageFiles,desc='load message csvs') if file[-3:] == "csv"]
+        orderbookCSVs = [pd.read_csv(self.orderbookPath + file, header=None)\
+            for file in tqdm(orderbookFiles, desc='load orderbook csvs') if file[-3:] == "csv"]
         return messageCSVs, orderbookCSVs
     
     def _pre_process_msg_ob(self,message_day,orderbook_day):
@@ -467,6 +486,7 @@ class LoadLOBSTER_resample():
                 init_OBs (List): List of arrays repr. init. orderbook
                                     data for each starting point.
         """
+        # message_day,orderbook_day = msg_day,ob_day
         d_end = (message_day['time_s'].max()+1-self.window_length+self.window_resolution
                  if self.window_type=="fixed_time"  
                  else message_day.shape[0]-
@@ -510,7 +530,7 @@ class LoadLOBSTER_resample():
 if __name__ == "__main__":
     #Load data from 50 Levels, fixing each episode to 150 steps
     #containing 100 messages each. 
-    loader=LoadLOBSTER_resample("./AlphaTrade",10,"fixed_time",window_length=1800,n_msg_per_step=100,window_resolution=60)
+    loader=LoadLOBSTER_resample("./GS_data",10,"fixed_steps",window_length=1800,n_msg_per_step=100,window_resolution=60)
     msgs,starts,ends,obs,max_msgs=loader.run_loading()
     print(msgs.shape)
     print(starts.shape)

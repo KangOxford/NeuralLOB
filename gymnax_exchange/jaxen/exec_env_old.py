@@ -178,7 +178,7 @@ class EnvParams(BaseEnvParams):
 class ExecutionEnv(BaseLOBEnv):
     def __init__(
             self, alphatradePath, task, window_index, action_type,
-            task_size = 500, rewardLambda=0.0,data_type="fixed_time"):
+            task_size = 100, rewardLambda=0.0,data_type="fixed_steps"):
         print(alphatradePath,window_index,data_type)
         super().__init__(alphatradePath,window_index,data_type)
         self.n_actions = 4 # [FT, M, NT, PP]
@@ -200,6 +200,7 @@ class ExecutionEnv(BaseLOBEnv):
             with open(pkl_file_name, 'rb') as f:
                 self.initstateArray = pickle.load(f)
             print("LOAD FROM PKL")
+            raise NotImplementedError
         except:
             print("DO COMPUTATION")
             states = [self._get_state_from_data(self.messages[i],
