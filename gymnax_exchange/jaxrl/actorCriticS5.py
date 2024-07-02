@@ -6,6 +6,7 @@ from jax._src import dtypes
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 import distrax
+import flax
 
 from purejaxrl.experimental.s5.s5 import StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
 from purejaxrl.experimental.s5.wrappers import FlattenObservationWrapper, LogWrapper
@@ -183,3 +184,31 @@ class CriticS5(nn.Module):
         hidden_out, critic = self.s5(hidden, embedding, dones)
         critic = self.value_decoder(critic)
         return jnp.squeeze(critic, axis=-1)
+
+def save_checkpoint(params, filename):
+    with open(filename, 'wb') as f:
+        f.write(flax.serialization.to_bytes(params))
+    print(f"Checkpoint saved to {filename}")
+
+def load_checkpoint(filename):
+    with open(filename, 'rb') as f:
+        params = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+    print(f"Checkpoint loaded from {filename}")
+    return params
+
+if __name__=="__main__":
+    train_state = ActorCriticS5(
+        action_dim=[2],
+        config={
+            "HIDDEN_SIZE": 64,
+            "MAX_TASK_SIZE": 2,
+            "REDUCE_ACTION_SPACE_BY": 1,
+            "CONT_ACTIONS": False,
+            "JOINT_ACTOR_CRITIC_NET": False
+        }
+    ) # initialize the model, just an example, not related to the project
+    save_checkpoint(train_state.params, "checkpoint_filename.ckpt")
+
+    loaded_params = load_checkpoint("checkpoint_filename.ckpt")
+
+    train_state = train_state.replace(params=loaded_params)
