@@ -47,6 +47,7 @@ class ActorCriticMoE(nn.Module):
 
         return pi, value, routing_info
     
+    
 def create_train_state(config: Dict, model: nn.Module, rng: jax.random.PRNGKey, learning_rate_fn) -> TrainState:
     params = model.init(rng, jnp.ones([1, config['obs_dim']]))['params']
     
@@ -77,6 +78,7 @@ if __name__ == "__main__":
         "ADAM_EPS": 1e-8,
         "n_layers": (2, 2, 2),  # Example layer configuration for ActorCriticS5
     }
+    
     
     action_dim = [2]
     num_experts = 3
