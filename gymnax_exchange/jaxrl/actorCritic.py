@@ -22,6 +22,66 @@ def biased_constant(
     return init
 
 
+class ActorCriticRNN(nn.Module):
+    action_dim: Sequence[int]
+    config: Dict
+    activation_fn_str: str = "relu"
+
+    def setup(self):
+        if self.activation_fn_str == "relu":
+            self.act_fn = nn.relu
+        elif self.activation_fn_str == "leaky_relu":
+            self.act_fn = nn.leaky_relu
+        elif self.activation_fn_str == "swish":
+            self.act_fn = nn.swish
+        elif self.activation_fn_str == "tanh":
+            self.act_fn = nn.tanh
+        elif self.activation_fn_str == "sigmoid":
+            self.act_fn = nn.sigmoid
+        else:
+            raise ValueError(f"Invalid activation_fn_str: {self.activation_fn_str}")
+
+        self.encoder = Encoder(name='embedding', config=self.config, act_fn=self.act_fn)
+        self.critic = Critic(self.config, act_fn=self.act_fn)
+        if self.config['CONT_ACTIONS']:
+            self.actor = ActorCont(self.action_dim, self.config, act_fn=self.act_fn)
+        else:
+            self.actor = ActorDisc(self.action_dim, self.config, act_fn=self.act_fn)
+        if not self.config['JOINT_ACTOR_CRITIC_NET']:
+            self.actor_embedding = Encoder(name='actor_embedding', config=self.config, act_fn=self.act_fn)
+
+    def __call__(self, hidden, x):
+        obs, dones = x
+        if not self.config['JOINT_ACTOR_CRITIC_NET']:
+            hidden, hidden_actor = hidden
+
+        # jax.debug.print('obs {}', obs)
+        # jax.debug.print('hidden {}', hidden)
+
+        hidden, embedding = self.encoder(hidden, obs, dones)
+        self.sow("intermediates", "embedding_rnn", embedding)
+
+        ## ACTOR
+        if self.config['JOINT_ACTOR_CRITIC_NET']:
+            actor_embedding = embedding
+        else:
+            hidden_actor, actor_embedding = self.actor_embedding(hidden_actor, obs, dones)
+            # manually save intermediate values as the layer norm inside the module isn't recorded automatically
+            self.sow("intermediates", "actor_embedding_rnn", actor_embedding)
+
+        pi = self.actor(actor_embedding)
+
+        ## CRITIC
+        value = self.critic(embedding)
+
+        if not self.config['JOINT_ACTOR_CRITIC_NET']:
+            hidden = (hidden, hidden_actor)
+
+        # jax.debug.print('pi {}', pi.sample(seed=1))
+
+        return hidden, pi, value
+
+
 class ScannedRNN(nn.Module):
     @functools.partial(
         nn.scan,
@@ -194,64 +254,6 @@ class Critic(nn.Module):
         return jnp.squeeze(critic, axis=-1)
 
 
-class ActorCriticRNN(nn.Module):
-    action_dim: Sequence[int]
-    config: Dict
-    activation_fn_str: str = "relu"
-
-    def setup(self):
-        if self.activation_fn_str == "relu":
-            self.act_fn = nn.relu
-        elif self.activation_fn_str == "leaky_relu":
-            self.act_fn = nn.leaky_relu
-        elif self.activation_fn_str == "swish":
-            self.act_fn = nn.swish
-        elif self.activation_fn_str == "tanh":
-            self.act_fn = nn.tanh
-        elif self.activation_fn_str == "sigmoid":
-            self.act_fn = nn.sigmoid
-        else:
-            raise ValueError(f"Invalid activation_fn_str: {self.activation_fn_str}")
-
-        self.encoder = Encoder(name='embedding', config=self.config, act_fn=self.act_fn)
-        self.critic = Critic(self.config, act_fn=self.act_fn)
-        if self.config['CONT_ACTIONS']:
-            self.actor = ActorCont(self.action_dim, self.config, act_fn=self.act_fn)
-        else:
-            self.actor = ActorDisc(self.action_dim, self.config, act_fn=self.act_fn)
-        if not self.config['JOINT_ACTOR_CRITIC_NET']:
-            self.actor_embedding = Encoder(name='actor_embedding', config=self.config, act_fn=self.act_fn)
-
-    def __call__(self, hidden, x):
-        obs, dones = x
-        if not self.config['JOINT_ACTOR_CRITIC_NET']:
-            hidden, hidden_actor = hidden
-
-        # jax.debug.print('obs {}', obs)
-        # jax.debug.print('hidden {}', hidden)
-
-        hidden, embedding = self.encoder(hidden, obs, dones)
-        self.sow("intermediates", "embedding_rnn", embedding)
-
-        ## ACTOR
-        if self.config['JOINT_ACTOR_CRITIC_NET']:
-            actor_embedding = embedding
-        else:
-            hidden_actor, actor_embedding = self.actor_embedding(hidden_actor, obs, dones)
-            # manually save intermediate values as the layer norm inside the module isn't recorded automatically
-            self.sow("intermediates", "actor_embedding_rnn", actor_embedding)
-
-        pi = self.actor(actor_embedding)
-
-        ## CRITIC
-        value = self.critic(embedding)
-
-        if not self.config['JOINT_ACTOR_CRITIC_NET']:
-            hidden = (hidden, hidden_actor)
-
-        # jax.debug.print('pi {}', pi.sample(seed=1))
-
-        return hidden, pi, value
 
     # @nn.compact
     # def __call__(self, hidden, x):

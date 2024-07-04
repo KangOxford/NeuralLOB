@@ -7,22 +7,26 @@ import flax
 from typing import Sequence, Dict, Any
 from flax.training.train_state import TrainState
 
-from gymnax_exchange.jaxrl.actorCriticS5 import ActorCriticS5, EncoderS5, ActorDiscS5, CriticS5
+from gymnax_exchange.jaxrl.actorCritic import ActorCriticRNN
 from gymnax_exchange.jaxrl.router import TopKRouter
 
 class ActorCriticMoE(nn.Module):
-    config: Dict
     action_dim: Sequence[int]
-    num_experts: int
-    k: int
+    config: Dict
+    num_experts: int 
+    k: int 
     
     def setup(self):
+        self.num_experts = self.config['num_experts']
+        self.k = self.config['top_k']
         self.router = TopKRouter(num_experts=self.num_experts, k=self.k)
-        self.actor_critics = [ActorCriticS5(name=f'actorCritic{i}_freeze', action_dim=self.action_dim, config=self.config) for i in range(self.num_experts)]
+        self.actor_critics = [ActorCriticRNN(name=f'actorCritic{i}_freeze', action_dim=self.action_dim, config=self.config) for i in range(self.num_experts)]
     
-    def __call__(self, x, *, key):
+    def __call__(self, hiddens, x, *, key):
         chex.assert_rank(x, 2)
-
+        
+        obs, dones = x
+        assert self.config['JOINT_ACTOR_CRITIC_NET']
         # Initialize the router
         routing_info = self.router(x, key=key)
 
@@ -31,21 +35,26 @@ class ActorCriticMoE(nn.Module):
         values = []
 
         for idx, actor_critic in enumerate(self.actor_critics):
-            hidden_all = actor_critic.initialize_carry(x.shape[0], self.config["HIDDEN_SIZE"], actor_critic.config['n_layers'])
-            hidden_all, pi, value = actor_critic(hidden_all, x)
-            hidden_states.append(hidden_all)
+            # hidden_all = actor_critic.initialize_carry(x.shape[0], self.config["HIDDEN_SIZE"], actor_critic.config['n_layers'])
+            hidden_state, pi, value = actor_critic(hiddens[idx], x)
+            hidden_states.append(hidden_state)
             pis.append(pi)
             values.append(value)
 
         pis = jnp.stack(pis, axis=-1)  # Shape: (batch_size, action_dim, num_experts)
         values = jnp.stack(values, axis=-1)  # Shape: (batch_size, value_dim, num_experts)
 
-        # Weighted outputs
-        top_expert_weights_expanded = routing_info.top_expert_weights[..., None]  # Shape: (batch_size, k, 1)
-        pi = jnp.sum(top_expert_weights_expanded * pis, axis=-1)  # Shape: (batch_size, action_dim)
-        value = jnp.sum(top_expert_weights_expanded * values, axis=-1)  # Shape: (batch_size, value_dim)
+        # Select the top expert for each input in the batch
+        top_expert_indices = jnp.argmax(routing_info.top_expert_weights, axis=-1)  # Shape: (batch_size,)
+        batch_indices = jnp.arange(x.shape[0])
+        
+        # Gather the outputs from the selected experts
+        selected_pis = pis[batch_indices, :, top_expert_indices]  # Shape: (batch_size, action_dim)
+        selected_values = values[batch_indices, :, top_expert_indices]  # Shape: (batch_size, value_dim)
 
-        return pi, value, routing_info
+        return hiddens, selected_pis, selected_values
+        # {do we need the routing_info here?}
+        # return hiddens, selected_pis, selected_values, routing_info
     
 def create_train_state(config: Dict, model: nn.Module, rng: jax.random.PRNGKey, learning_rate_fn) -> TrainState:
     params = model.init(rng, jnp.ones([1, config['obs_dim']]))['params']
