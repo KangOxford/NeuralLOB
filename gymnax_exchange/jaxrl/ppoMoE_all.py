@@ -12,7 +12,9 @@ import gymnax
 import functools
 from gymnax.environments import spaces
 from wrappers import FlattenObservationWrapper, LogWrapper
-
+from gymnax_exchange.jaxrl.router import TopKRouter
+import chex
+import flax
 
 class ScannedRNN(nn.Module):
     @functools.partial(
@@ -79,7 +81,52 @@ class ActorCriticRNN(nn.Module):
         return hidden, pi, jnp.squeeze(critic, axis=-1)
 
 
+class ActorCriticMoE(nn.Module):
+    action_dim: Sequence[int]
+    config: Dict
+    num_experts: int 
+    k: int 
+    
+    def setup(self):
+        self.num_experts = self.config['num_experts']
+        self.k = self.config['top_k']
+        self.router = TopKRouter(num_experts=self.num_experts, k=self.k)
+        self.actor_critics = [ActorCriticRNN(name=f'actorCritic{i}_freeze', action_dim=self.action_dim, config=self.config) for i in range(self.num_experts)]
+    
+    def __call__(self, hiddens, x, *, key):
+        chex.assert_rank(x, 2)
+        
+        obs, dones = x
+        assert self.config['JOINT_ACTOR_CRITIC_NET']
+        # Initialize the router
+        routing_info = self.router(x, key=key)
 
+        hidden_states = []
+        pis = []
+        values = []
+
+        for idx, actor_critic in enumerate(self.actor_critics):
+            # hidden_all = actor_critic.initialize_carry(x.shape[0], self.config["HIDDEN_SIZE"], actor_critic.config['n_layers'])
+            hidden_state, pi, value = actor_critic(hiddens[idx], x)
+            hidden_states.append(hidden_state)
+            pis.append(pi)
+            values.append(value)
+
+        pis = jnp.stack(pis, axis=-1)  # Shape: (batch_size, action_dim, num_experts)
+        values = jnp.stack(values, axis=-1)  # Shape: (batch_size, value_dim, num_experts)
+
+        # Select the top expert for each input in the batch
+        top_expert_indices = jnp.argmax(routing_info.top_expert_weights, axis=-1)  # Shape: (batch_size,)
+        batch_indices = jnp.arange(x.shape[0])
+        
+        # Gather the outputs from the selected experts
+        selected_pis = pis[batch_indices, :, top_expert_indices]  # Shape: (batch_size, action_dim)
+        selected_values = values[batch_indices, :, top_expert_indices]  # Shape: (batch_size, value_dim)
+
+        return hiddens, selected_pis, selected_values
+        # {do we need the routing_info here?}
+        # return hiddens, selected_pis, selected_values, routing_info
+    
 
 class Transition(NamedTuple):
     done: jnp.ndarray
@@ -112,7 +159,8 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCriticRNN(env.action_space(env_params).n, config=config)
+        network = ActorCriticMoE(env.action_space(env_params).n, config=config, num_experts=config['num_experts'], k=config['top_k'])
+        
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
@@ -120,8 +168,25 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        init_hstate = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
-        network_params = network.init(_rng, init_hstate, init_x)
+        init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+                        for _ in range(config['num_experts'])]
+        network_params = network.init(_rng, init_hstates, init_x)
+        
+        # Load pretrained expert model params
+        expert_params = []
+        for i in range(config['num_experts']):
+            params_file = f"expert_{i}_params.pkl"
+            with open(params_file, 'rb') as f:
+                expert_param = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+            expert_params.append(expert_param)
+        
+        # Replace the model's parameters with the pretrained expert parameters
+        network_params = network_params.unfreeze()
+        for i in range(config['num_experts']):
+            network_params['params'][f'actorCritic{i}_freeze'] = expert_params[i]['params']
+        network_params = flax.core.frozen_dict.freeze(network_params)
+
+        
         if config["ANNEAL_LR"]:
             tx = optax.chain(
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
@@ -132,6 +197,8 @@ def make_train(config):
                 optax.clip_by_global_norm(config["MAX_GRAD_NORM"]),
                 optax.adam(config["LR"], eps=1e-5),
             )
+            
+            
         train_state = TrainState.create(
             apply_fn=network.apply,
             params=network_params,
