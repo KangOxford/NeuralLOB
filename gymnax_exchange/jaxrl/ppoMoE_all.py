@@ -11,17 +11,29 @@ import distrax
 import gymnax
 import functools
 from gymnax.environments import spaces
-from wrappers import FlattenObservationWrapper, LogWrapper
-from gymnax_exchange.jaxrl.router import TopKRouter
+import sys
+sys.path.append('../purejaxrl')
+sys.path.append('../AlphaTrade')
+from purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
+# from gymnax_exchange.jaxrl.router import TopKRouter
 import chex
 import flax
 
 from absl import logging
 import chex
 import flax.linen as nn
-import gin
+# import gin
 import jax
 from gymnax_exchange.jaxrl import types
+
+
+from jax.lib import xla_bridge 
+print(xla_bridge.get_backend().platform)
+#Code snippet to disable all jitting.
+from jax import config
+config.update("jax_disable_jit", False) 
+# config.update("jax_disable_jit", True)
+config.update("jax_check_tracer_leaks", False) 
 
 
 class ScannedRNN(nn.Module):
@@ -91,7 +103,7 @@ class ActorCriticRNN(nn.Module):
 
 
 
-@gin.configurable
+# @gin.configurable
 class TopKRouter(nn.Module):
   """A simple router that linearly projects assignments."""
 
@@ -133,9 +145,9 @@ class TopKRouter(nn.Module):
 
 class ActorCriticMoE(nn.Module):
     action_dim: Sequence[int]
-    config: Dict
     num_experts: int 
-    k: int = 1
+    k: int
+    config: Dict
     
     def setup(self):
         self.num_experts = self.config['num_experts']
@@ -196,7 +208,7 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCriticMoE(env.action_space(env_params).n, config=config, num_experts=config['num_experts'], k=config['top_k'])
+        network = ActorCriticMoE(env.action_space(env_params).n, num_experts=config['num_experts'], k=config['top_k'], config=config)
         
         rng, _rng = jax.random.split(rng)
         init_x = (
@@ -205,6 +217,7 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
+        
         # init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
         #                 for _ in range(config['num_experts'])]
         # # TODO do I need to remvoe the for loop and use vmap?
@@ -212,7 +225,18 @@ def make_train(config):
         initialize_vmap = jax.vmap(ScannedRNN.initialize_carry, in_axes=(None, None))
         init_hstates = initialize_vmap(config["NUM_ENVS"], 128)
         network_params = network.init(_rng, init_hstates, init_x)
-        
+                
+        # │   223 │   │   # # TODO do I need to remvoe the for loop and use vmap?                            │
+        # │   224 │   │   indices = jnp.arange(config['num_experts'])                                        │
+        # │   225 │   │   initialize_vmap = jax.vmap(ScannedRNN.initialize_carry, in_axes=(None, None))      │
+        # │ ❱ 226 │   │   init_hstates = initialize_vmap(config["NUM_ENVS"], 128)                            │
+        # │   227 │   │   network_params = network.init(_rng, init_hstates, init_x)                          │
+        # │   228                                                                                            │
+        # │   229                                                                                            │
+        # ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+        # ValueError: vmap must have at least one non-None value in in_axes
+        # I0000 00:00:1720172384.958425  152546 tfrt_cpu_pjrt_client.cc:352] TfrtCpuClient destroyed.
+                
         
         # # Load pretrained expert model params
         # expert_params = []
@@ -487,6 +511,9 @@ if __name__ == "__main__":
         "ENV_NAME": "CartPole-v1",
         "ANNEAL_LR": True,
         "DEBUG": True,
+        
+        "num_experts":2,
+        'top_k':1,
     }
 
     rng = jax.random.PRNGKey(30)
