@@ -70,7 +70,7 @@ class TopKRouter(nn.Module):
 
   k: int
   num_experts: int | None = None
-  noisy_routing: bool = False
+  # noisy_routing: bool = False
   noise_std: float = 1.0
 
   def setup(self):
@@ -83,7 +83,7 @@ class TopKRouter(nn.Module):
       *,
       num_experts: int | None = None,
       k: int | None = None,
-      key: jax.Array | None = None,
+      # key: jax.Array | None = None,
       **kwargs
   ) -> types.RouterReturn:
     chex.assert_rank(x, 2)
@@ -95,16 +95,17 @@ class TopKRouter(nn.Module):
     x = nn.Dense(num_experts, use_bias=False)(x)
     chex.assert_shape(x, (sequence_length, num_experts))
 
-    if not self.noisy_routing:
-      probs = jax.nn.softmax(x, axis=-1)
-    else:
-      # A trick proposed by
-      # "Scaling Vision with Sparse Mixture of Experts", Riquelme et al., 2021.
-      # (https://arxiv.org/abs/2106.05974)
-      noise_std = (1.0 / num_experts) * self.noise_std
-      noise = noise_std * jax.random.normal(key=key, shape=x.shape)
-      x_noisy = x + noise
-      probs = jax.nn.softmax(x_noisy, axis=-1)
+    probs = jax.nn.softmax(x, axis=-1)
+    # if not self.noisy_routing:
+    #   probs = jax.nn.softmax(x, axis=-1)
+    # else:
+    #   # A trick proposed by
+    #   # "Scaling Vision with Sparse Mixture of Experts", Riquelme et al., 2021.
+    #   # (https://arxiv.org/abs/2106.05974)
+    #   noise_std = (1.0 / num_experts) * self.noise_std
+    #   noise = noise_std * jax.random.normal(key=key, shape=x.shape)
+    #   x_noisy = x + noise
+    #   probs = jax.nn.softmax(x_noisy, axis=-1)
 
     top_expert_weights, top_experts = jax.lax.top_k(probs, k=k)
 

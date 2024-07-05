@@ -16,6 +16,14 @@ from gymnax_exchange.jaxrl.router import TopKRouter
 import chex
 import flax
 
+from absl import logging
+import chex
+import flax.linen as nn
+import gin
+import jax
+from gymnax_exchange.jaxrl import types
+
+
 class ScannedRNN(nn.Module):
     @functools.partial(
         nn.scan,
@@ -81,11 +89,53 @@ class ActorCriticRNN(nn.Module):
         return hidden, pi, jnp.squeeze(critic, axis=-1)
 
 
+
+
+@gin.configurable
+class TopKRouter(nn.Module):
+  """A simple router that linearly projects assignments."""
+
+  k: int
+  num_experts: int | None = None
+  noise_std: float = 1.0
+
+  def setup(self):
+    logging.info("Creating a %s", self.__class__.__name__)
+
+  @nn.compact
+  def __call__(
+      self,
+      x: jax.Array,
+      *,
+      num_experts: int | None = None,
+      k: int | None = None,
+      **kwargs
+  ) -> types.RouterReturn:
+    chex.assert_rank(x, 2)
+
+    num_experts = nn.merge_param("num_experts", num_experts, self.num_experts)
+    k = nn.merge_param("k", k, self.k)
+    sequence_length = x.shape[0]
+
+    x = nn.Dense(num_experts, use_bias=False)(x)
+    chex.assert_shape(x, (sequence_length, num_experts))
+
+    probs = jax.nn.softmax(x, axis=-1)
+
+    top_expert_weights, top_experts = jax.lax.top_k(probs, k=k)
+
+    return types.RouterReturn(
+        output=x,
+        probabilities=probs,
+        top_expert_weights=top_expert_weights,
+        top_experts=top_experts,
+    )
+
 class ActorCriticMoE(nn.Module):
     action_dim: Sequence[int]
     config: Dict
     num_experts: int 
-    k: int 
+    k: int = 1
     
     def setup(self):
         self.num_experts = self.config['num_experts']
@@ -95,37 +145,24 @@ class ActorCriticMoE(nn.Module):
     
     def __call__(self, hiddens, x, *, key):
         chex.assert_rank(x, 2)
-        
-        obs, dones = x
         assert self.config['JOINT_ACTOR_CRITIC_NET']
-        # Initialize the router
-        routing_info = self.router(x, key=key)
-
-        hidden_states = []
-        pis = []
-        values = []
-
-        for idx, actor_critic in enumerate(self.actor_critics):
-            # hidden_all = actor_critic.initialize_carry(x.shape[0], self.config["HIDDEN_SIZE"], actor_critic.config['n_layers'])
-            hidden_state, pi, value = actor_critic(hiddens[idx], x)
-            hidden_states.append(hidden_state)
-            pis.append(pi)
-            values.append(value)
-
-        pis = jnp.stack(pis, axis=-1)  # Shape: (batch_size, action_dim, num_experts)
-        values = jnp.stack(values, axis=-1)  # Shape: (batch_size, value_dim, num_experts)
-
-        # Select the top expert for each input in the batch
-        top_expert_indices = jnp.argmax(routing_info.top_expert_weights, axis=-1)  # Shape: (batch_size,)
-        batch_indices = jnp.arange(x.shape[0])
         
-        # Gather the outputs from the selected experts
-        selected_pis = pis[batch_indices, :, top_expert_indices]  # Shape: (batch_size, action_dim)
-        selected_values = values[batch_indices, :, top_expert_indices]  # Shape: (batch_size, value_dim)
-
-        return hiddens, selected_pis, selected_values
-        # {do we need the routing_info here?}
-        # return hiddens, selected_pis, selected_values, routing_info
+        # obs, dones = x
+        
+        # Get routing information
+        routing_info = self.router(x, key=key)
+        
+        # Get the index of the top expert
+        top_expert_idx = routing_info.top_experts[0]  # Assuming k=1, we take the first (and only) top expert
+        
+        # Use only the selected expert
+        selected_actor_critic = self.actor_critics[top_expert_idx]
+        hidden_state, pi, value = selected_actor_critic(hiddens[top_expert_idx], x)
+        
+        # Update only the hidden state for the selected expert
+        new_hiddens = hiddens.at[top_expert_idx].set(hidden_state)
+        
+        return new_hiddens, pi, value
     
 
 class Transition(NamedTuple):
@@ -168,23 +205,48 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
-                        for _ in range(config['num_experts'])]
+        # init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        #                 for _ in range(config['num_experts'])]
+        # # TODO do I need to remvoe the for loop and use vmap?
+        indices = jnp.arange(config['num_experts'])
+        initialize_vmap = jax.vmap(ScannedRNN.initialize_carry, in_axes=(None, None))
+        init_hstates = initialize_vmap(config["NUM_ENVS"], 128)
         network_params = network.init(_rng, init_hstates, init_x)
         
-        # Load pretrained expert model params
-        expert_params = []
-        for i in range(config['num_experts']):
+        
+        # # Load pretrained expert model params
+        # expert_params = []
+        # for i in range(config['num_experts']):
+        #     params_file = f"expert_{i}_params.pkl"
+        #     with open(params_file, 'rb') as f:
+        #         expert_param = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        #     expert_params.append(expert_param)
+        def load_expert_params(i):
             params_file = f"expert_{i}_params.pkl"
             with open(params_file, 'rb') as f:
-                expert_param = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
-            expert_params.append(expert_param)
+                return flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        vmap_load_expert_params = jax.vmap(load_expert_params)
+        # Generate an array of expert indices
+        expert_indices = jnp.arange(config['num_experts'])
+        # Use vmap to load all expert parameters in parallel
+        expert_params = vmap_load_expert_params(expert_indices)
         
-        # Replace the model's parameters with the pretrained expert parameters
+        
+        
+        # # Replace the model's parameters with the pretrained expert parameters
+        # network_params = network_params.unfreeze()
+        # for i in range(config['num_experts']):
+        #     network_params['params'][f'actorCritic{i}_freeze'] = flax.core.frozen_dict.freeze(expert_params[i]['params'])
+        # # network_params = flax.core.frozen_dict.freeze(network_params)
         network_params = network_params.unfreeze()
-        for i in range(config['num_experts']):
-            network_params['params'][f'actorCritic{i}_freeze'] = expert_params[i]['params']
-        network_params = flax.core.frozen_dict.freeze(network_params)
+        def assign_params(i, network_params, expert_params):
+            # Create the key dynamically
+            key = f'actorCritic{i}_freeze'
+            # Perform the assignment for this specific expert
+            return network_params.at['params'].set(key, flax.core.frozen_dict.freeze(expert_params[i]['params']))
+        indices = jnp.arange(config['num_experts'])
+        assign_vmap = jax.vmap(assign_params, in_axes=(0, None, None))
+        network_params = assign_vmap(indices, network_params, expert_params)
 
         
         if config["ANNEAL_LR"]:
