@@ -218,60 +218,63 @@ def make_train(config):
             jnp.zeros((1, config["NUM_ENVS"])),
         )
         
-        # init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
-        #                 for _ in range(config['num_experts'])]
-        # # TODO do I need to remvoe the for loop and use vmap?
-        indices = jnp.arange(config['num_experts'])
-        initialize_vmap = jax.vmap(ScannedRNN.initialize_carry, in_axes=(None, None))
-        init_hstates = initialize_vmap(config["NUM_ENVS"], 128)
-        network_params = network.init(_rng, init_hstates, init_x)
-                
-        # │   223 │   │   # # TODO do I need to remvoe the for loop and use vmap?                            │
-        # │   224 │   │   indices = jnp.arange(config['num_experts'])                                        │
-        # │   225 │   │   initialize_vmap = jax.vmap(ScannedRNN.initialize_carry, in_axes=(None, None))      │
-        # │ ❱ 226 │   │   init_hstates = initialize_vmap(config["NUM_ENVS"], 128)                            │
-        # │   227 │   │   network_params = network.init(_rng, init_hstates, init_x)                          │
-        # │   228                                                                                            │
-        # │   229                                                                                            │
-        # ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-        # ValueError: vmap must have at least one non-None value in in_axes
-        # I0000 00:00:1720172384.958425  152546 tfrt_cpu_pjrt_client.cc:352] TfrtCpuClient destroyed.
+        init_hstates = [ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+                        for _ in range(config['num_experts'])]
+
+        # # Define the initial state function for scan
+        # def initialize_expert_carry(carry, _):
+        #     # Carry should match the structure of the output of this function
+        #     new_carry = ScannedRNN.initialize_carry(config["NUM_ENVS"], 128)
+        #     return new_carry, None
+        # # Initialize the carry with the correct structure
+        # initial_carry = []
+        # # Use lax.scan to initialize hidden states
+        # init_hstates, _ = jax.lax.scan(initialize_expert_carry, initial_carry, jnp.arange(config['num_experts']))
+        # init_hstates = list(init_hstates)
+        
+        # breakpoint()
+        # jax.debug.breakpoint()
                 
         
         # # Load pretrained expert model params
-        # expert_params = []
-        # for i in range(config['num_experts']):
-        #     params_file = f"expert_{i}_params.pkl"
-        #     with open(params_file, 'rb') as f:
-        #         expert_param = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
-        #     expert_params.append(expert_param)
-        def load_expert_params(i):
+        expert_params = []
+        for i in range(config['num_experts']):
             params_file = f"expert_{i}_params.pkl"
             with open(params_file, 'rb') as f:
-                return flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
-        vmap_load_expert_params = jax.vmap(load_expert_params)
-        # Generate an array of expert indices
-        expert_indices = jnp.arange(config['num_experts'])
-        # Use vmap to load all expert parameters in parallel
-        expert_params = vmap_load_expert_params(expert_indices)
+                expert_param = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+                expert_params.append(expert_param)
+        # def load_expert_params(i):
+        #     params_file = f"expert_{i}_params.pkl"
+        #     with open(params_file, 'rb') as f:
+        #         return flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        # vmap_load_expert_params = jax.vmap(load_expert_params)
+        # # Generate an array of expert indices
+        # expert_indices = jnp.arange(config['num_experts'])
+        # # Use vmap to load all expert parameters in parallel
+        # expert_params = vmap_load_expert_params(expert_indices)
         
-        
+        breakpoint()
+        jax.debug.breakpoint()        
         
         # # Replace the model's parameters with the pretrained expert parameters
-        # network_params = network_params.unfreeze()
-        # for i in range(config['num_experts']):
-        #     network_params['params'][f'actorCritic{i}_freeze'] = flax.core.frozen_dict.freeze(expert_params[i]['params'])
-        # # network_params = flax.core.frozen_dict.freeze(network_params)
         network_params = network_params.unfreeze()
-        def assign_params(i, network_params, expert_params):
-            # Create the key dynamically
-            key = f'actorCritic{i}_freeze'
-            # Perform the assignment for this specific expert
-            return network_params.at['params'].set(key, flax.core.frozen_dict.freeze(expert_params[i]['params']))
-        indices = jnp.arange(config['num_experts'])
-        assign_vmap = jax.vmap(assign_params, in_axes=(0, None, None))
-        network_params = assign_vmap(indices, network_params, expert_params)
-
+        for i in range(config['num_experts']):
+            network_params['params'][f'actorCritic{i}_freeze'] = flax.core.frozen_dict.freeze(expert_params[i]['params'])
+        # network_params = flax.core.frozen_dict.freeze(network_params)
+        # network_params = network_params.unfreeze()
+        # def assign_params(i, network_params, expert_params):
+        #     # Create the key dynamically
+        #     key = f'actorCritic{i}_freeze'
+        #     # Perform the assignment for this specific expert
+        #     return network_params.at['params'].set(key, flax.core.frozen_dict.freeze(expert_params[i]['params']))
+        # indices = jnp.arange(config['num_experts'])
+        # assign_vmap = jax.vmap(assign_params, in_axes=(0, None, None))
+        # network_params = assign_vmap(indices, network_params, expert_params)
+        # [for _]
+        [scannedRNN(i) for _ in range(100)]
+        scannedRNN(jnp.arange(100))
+        vmap(scannedRNN)(jnp.arange(100))
+        vmap(scanedRNN, (0,), 0)
         
         if config["ANNEAL_LR"]:
             tx = optax.chain(

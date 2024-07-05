@@ -756,7 +756,7 @@ if __name__ == "__main__":
         "ANNEAL_LR": 'cosine', # 'linear', 'cosine', False
         "NORMALIZE_ENV": False,  # only norms observations (not reward)
         
-        "RNN_TYPE": "S5",  # "GRU", "S5"
+        "RNN_TYPE": "GRU",  # "GRU", "S5"
         "HIDDEN_SIZE": 64,  # 128
         "ACTIVATION_FN": "relu", # "tanh", "relu", "leaky_relu", "sigmoid", "swish"
         "ACTION_NOISE_COLOR": 2.,  # 2  # only relevant if CONT_ACTIONS == True
