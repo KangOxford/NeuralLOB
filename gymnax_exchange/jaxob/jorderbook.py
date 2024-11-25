@@ -41,11 +41,14 @@ class OrderBook():
     def reset(
             self: 'OrderBook',
             l2_book: Optional[jnp.ndarray] = None,
+            time: Optional[jnp.ndarray] = None,
         ) -> LobState:
         """"""
         state = self.init()
         if l2_book is not None:
-            msgs = job.init_msgs_from_l2(self.cfg,l2_book,time=jnp.array([0,0]))
+            if time is None:
+                time=jnp.array([0,0])
+            msgs = job.init_msgs_from_l2(self.cfg,l2_book,time=time)
             state = self.process_orders_array(state, msgs)
         return state
 
