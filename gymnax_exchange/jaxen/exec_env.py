@@ -94,6 +94,7 @@ import gymnax
 from gymnax.environments import environment, spaces
 # sys.path.append('/Users/sasrey/AlphaTrade')
 # sys.path.append('/homes/80/kang/AlphaTrade')
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))
 sys.path.append('.')
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 from gymnax_exchange.jaxen.base_env import BaseLOBEnv
@@ -241,7 +242,7 @@ class ExecutionEnv(BaseLOBEnv):
         # Save time of final message to add to state
         time = total_messages[-1, -2:]
         # To only ever consider the trades from the last step simply replace state.trades with an array of -1s of the same size. 
-        trades_reinit = (jnp.ones((self.nTradesLogged, 6)) * -1).astype(jnp.int32)
+        trades_reinit = (jnp.ones((self.nTradesLogged, 8)) * -1).astype(jnp.int32)
         # Process messages of step (action+data) through the orderbook
         (asks, bids, trades), (bestasks, bestbids) = job.scan_through_entire_array_save_bidask(
             total_messages,
@@ -295,7 +296,7 @@ class ExecutionEnv(BaseLOBEnv):
         reward, extras = self._get_reward(state, params, trades)
         quant_executed = state.quant_executed + extras["agentQuant"]
         # CAVE: uses seconds only (not ns)
-        trade_duration_step = (agent_trades[:, 1] / state.task_to_execute * (agent_trades[:, -2] - state.init_time[0])).sum()
+        trade_duration_step = (jnp.abs(agent_trades[:, 1]) / state.task_to_execute * (agent_trades[:, -2] - state.init_time[0])).sum()
         trade_duration = state.trade_duration + trade_duration_step
         # jax.debug.print('trade_duration_step: {}, trade_duration: {}', trade_duration_step, trade_duration)
         # jax.debug.print('left before mkt: {}, left after mkt {}', quant_left, state.task_to_execute - state.quant_executed - extras["agentQuant"])
@@ -592,7 +593,7 @@ class ExecutionEnv(BaseLOBEnv):
         """
         price_levels, r_idx = jnp.unique(
             agent_trades[:, 0], return_inverse=True, size=self.n_actions+1, fill_value=0)
-        quant_by_price = jax.ops.segment_sum(agent_trades[:, 1], r_idx, num_segments=self.n_actions+1)
+        quant_by_price = jax.ops.segment_sum(jnp.abs(agent_trades[:, 1]), r_idx, num_segments=self.n_actions+1)
         price_quants = jnp.vstack((price_levels[1:], quant_by_price[1:])).T
         # jax.debug.print("_get_executed_by_level\n {}", price_quants)
         return price_quants
@@ -632,7 +633,7 @@ class ExecutionEnv(BaseLOBEnv):
         )
         exec_quant_aggr = jnp.where(
             aggr_trades_mask,
-            agent_trades[:, 1],
+            jnp.abs(agent_trades[:, 1]),
             0
         ).sum()
         # jax.debug.print('best_price\n {}', best_price)
@@ -806,9 +807,10 @@ class ExecutionEnv(BaseLOBEnv):
             next_id = state.customIDcounter + self.n_actions
             return jnp.zeros((8,), dtype=jnp.int32), next_id, time 
         
+
         def place_doom_trade(trades, price, quant, time):
             doom_trade = job.create_trade(
-                price, quant, self.trader_unique_id + self.n_actions + 1, -666666, *time)
+                price, quant, self.trader_unique_id + self.n_actions + 1, -666666, *time, self.trader_unique_id, -666666)
             # jax.debug.print('doom_trade\n {}', doom_trade)
             trades = job.add_trade(trades, doom_trade)
             return trades
@@ -851,7 +853,7 @@ class ExecutionEnv(BaseLOBEnv):
         # how much of the market order could be executed
         mkt_exec_quant = jnp.where(
             trades[:, 3] == order_msg[5],
-            trades[:, 1],  # executed quantity
+            jnp.abs(trades[:, 1]),  # executed quantity
             0
         ).sum()
         # jax.debug.print('mkt_exec_quant: {}', mkt_exec_quant)
@@ -890,12 +892,11 @@ class ExecutionEnv(BaseLOBEnv):
         executed = jnp.where((trades[:, 0] >= 0)[:, jnp.newaxis], trades, 0)
         # Mask to keep only the trades where the RL agent is involved, apply mask.
         # mask2 = ((job.INITID < executed[:, 2]) & (executed[:, 2] < 0)) | ((job.INITID < executed[:, 3]) & (executed[:, 3] < 0))
-        mask2 = ((self.trader_unique_id <= executed[:, 2]) & (executed[:, 2] < 0)) \
-              | ((self.trader_unique_id <= executed[:, 3]) & (executed[:, 3] < 0))
+        mask2 = (self.trader_unique_id == executed[:, 6])  | (self.trader_unique_id == executed[:, 7]) #Mask to find trader ID
         agentTrades = jnp.where(mask2[:, jnp.newaxis], executed, 0)
         otherTrades = jnp.where(mask2[:, jnp.newaxis], 0, executed)
         # jax.debug.print('agentTrades\n {}', agentTrades[:30])
-        agentQuant = agentTrades[:,1].sum() # new_execution quants
+        agentQuant = jnp.abs(agentTrades[:,1]).sum() # new_execution quants
         
         # ---------- used for vwap, revenue ----------
         # vwapFunc = lambda tr: jnp.nan_to_num(
@@ -905,14 +906,14 @@ class ExecutionEnv(BaseLOBEnv):
         # only use other traders' trades for value weighted price
         # vwap = vwapFunc(otherTrades) # average_price of all other trades
 
-        other_exec_quants = otherTrades[:, 1].sum()
+        other_exec_quants = jnp.abs(otherTrades[:, 1]).sum()
         vwap = jax.lax.cond(
             other_exec_quants == 0,
             lambda: state.init_price / self.tick_size,
-            lambda: (otherTrades[:, 0] // self.tick_size * otherTrades[:, 1]).sum() / other_exec_quants
+            lambda: (otherTrades[:, 0] // self.tick_size * jnp.abs(otherTrades[:, 1])).sum() / other_exec_quants
         )
         
-        revenue = (agentTrades[:,0] // self.tick_size * agentTrades[:,1]).sum()
+        revenue = (agentTrades[:,0] // self.tick_size * jnp.abs(agentTrades[:,1])).sum()
         
         # ---------- used for slippage, price_drift, and RM(rolling mean) ----------
         rollingMeanValueFunc_FLOAT = lambda average_val,new_val:(average_val*state.step_counter+new_val)/(state.step_counter+1)
@@ -1062,6 +1063,7 @@ class ExecutionEnv(BaseLOBEnv):
             # jax.debug.print('normalized obs:\n {}', obs)
         if flatten:
             obs, _ = jax.flatten_util.ravel_pytree(obs)
+
         return obs
 
     def _get_obs_full(self, state: EnvState, params:EnvParams) -> chex.Array:
@@ -1186,7 +1188,7 @@ if __name__ == "__main__":
         print("AlphaTrade folder:",ATFolder)
     except:
         # ATFolder = "./testing_oneDay"
-        ATFolder = "./training_oneDay/"
+        ATFolder = "./training_oneDay"
         # ATFolder = '/home/duser/AlphaTrade'
         # ATFolder = '/homes/80/kang/AlphaTrade'
         # ATFolder = "/homes/80/kang/AlphaTrade/testing_oneDay"
@@ -1225,14 +1227,16 @@ if __name__ == "__main__":
     )
     # print(env_params.message_data.shape, env_params.book_data.shape)
 
+
     start=time.time()
     obs,state=env.reset(key_reset, env_params)
     print("Time for reset: \n",time.time()-start)
     # print("State after reset: \n",state)
-    print(state)
+   
+    
 
     # print(env_params.message_data.shape, env_params.book_data.shape)
-    for i in range(1,100):
+    for i in range(1,10):
         # ==================== ACTION ====================
         # ---------- acion from random sampling ----------
         print("-"*20)
@@ -1245,9 +1249,14 @@ if __name__ == "__main__":
         start=time.time()
         obs, state, reward, done, info = env.step(
             key_step, state, test_action, env_params)
-        for key, value in info.items():
-            print(key, value)
-            print('is_sell_task', state.is_sell_task)
+        print("Reward: \n",reward)
+        #print(state.trades)
+        #for key, value in info.items():
+            #print(key, value)
+            #print('is_sell_task', state.is_sell_task)
+            #print('trades',state.trades)
+           # print('revenue', state.total_revenue)
+         #   print('reward',reward)
         # print(f"State after {i} step: \n",state,done,file=open('output.txt','a'))
         # print(f"Time for {i} step: \n",time.time()-start)
         if done:

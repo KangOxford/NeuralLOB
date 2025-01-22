@@ -26,7 +26,7 @@ from jax import config
 # config.update('jax_platform_name', 'cpu')
 # print("Num Jax Devices:",jax.device_count(),"Device List:",jax.devices())
 
-from gymnax_exchange.jaxen.exec_env_old import ExecutionEnv
+from AlphaTrade.gymnax_exchange.jaxen.old.exec_env_old import ExecutionEnv
 
 #Code snippet to disable all jitting.
 config.update("jax_disable_jit", False) 

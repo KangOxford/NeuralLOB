@@ -14,7 +14,7 @@ chex.assert_gpu_available(backend=None)
 from jax import config # Code snippet to disable all jitting.
 config.update("jax_disable_jit", False)
 # config.update("jax_disable_jit", True)
-from gymnax_exchange.jaxen.exec_env_old import *
+from AlphaTrade.gymnax_exchange.jaxen.old.exec_env_old import *
 import json
 # ============== testing scripts ===============
 
@@ -62,8 +62,8 @@ if __name__ == "__main__":
             "TASKSIDE":'buy'
         }
     import flax
-    from gymnax_exchange.jaxrl.ppo import ActorCriticRNN
-    from gymnax_exchange.jaxrl.ppo import ScannedRNN
+    from gymnax_exchange.jaxrl.ppo_mm import ActorCriticRNN
+    from gymnax_exchange.jaxrl.ppo_mm import ScannedRNN
     with open('/homes/80/kang/AlphaTrade/params_file_smooth-paper-19_09-23_04-30', 'rb') as f:
     # with open('/homes/80/kang/AlphaTrade/params_file_prime-armadillo-72_07-17_11-02', 'rb') as f:
     # with open('/homes/80/kang/AlphaTrade/params_file_firm-fire-68_07-17_09-53', 'rb') as f:

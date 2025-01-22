@@ -33,7 +33,7 @@ class OrderBook():
     def init(self: 'OrderBook') -> LobState:
         asks = (jnp.ones((self.cfg.nOrders, 6)) * -1).astype(jnp.int32)
         bids = (jnp.ones((self.cfg.nOrders, 6)) * -1).astype(jnp.int32)
-        trades = (jnp.ones((self.cfg.nTrades, 6)) * -1).astype(jnp.int32)
+        trades = (jnp.ones((self.cfg.nTrades, 8)) * -1).astype(jnp.int32)
         key=jax.random.PRNGKey(self.cfg.seed)
         return LobState(asks, bids, trades,key)
 

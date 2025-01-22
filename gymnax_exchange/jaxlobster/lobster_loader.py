@@ -510,7 +510,7 @@ class LoadLOBSTER_resample():
 if __name__ == "__main__":
     #Load data from 50 Levels, fixing each episode to 150 steps
     #containing 100 messages each. 
-    loader=LoadLOBSTER_resample("./AlphaTrade",10,"fixed_time",window_length=1800,n_msg_per_step=100,window_resolution=60)
+    loader=LoadLOBSTER_resample("/AlphaTrade/training_oneDay",10,"fixed_time",window_length=1800,n_msg_per_step=100,window_resolution=60)
     msgs,starts,ends,obs,max_msgs=loader.run_loading()
     print(msgs.shape)
     print(starts.shape)

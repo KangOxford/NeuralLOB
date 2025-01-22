@@ -4,7 +4,7 @@ import gymnax
 import sys
 sys.path.append('/Users/sasrey/AlphaTrade')
 sys.path.append('/homes/80/kang/AlphaTrade')
-from gymnax_exchange.jaxen.base_env_old import BaseLOBEnv
+from AlphaTrade.gymnax_exchange.jaxen.old.base_env_old import BaseLOBEnv
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 import chex
 import time

@@ -23,7 +23,7 @@ sys.path.append('../AlphaTrade')
 #Code snippet to disable all jitting.
 from jax import config
 
-from gymnax_exchange.jaxen.exec_env_old import ExecutionEnv
+from AlphaTrade.gymnax_exchange.jaxen.old.exec_env_old import ExecutionEnv
 
 config.update("jax_disable_jit", False) 
 # config.update("jax_disable_jit", True)
@@ -506,9 +506,9 @@ if __name__ == "__main__":
     try:
         ATFolder = sys.argv[1] 
     except:
-        ATFolder = "/homes/80/kang/AlphaTrade/training_oneDay"
+        #ATFolder = "/homes/80/kang/AlphaTrade/training_oneDay"
         # ATFolder = '/homes/80/kang/AlphaTrade'
-        # ATFolder = '/home/duser/AlphaTrade'
+        ATFolder = '/home/duser/AlphaTrade/training_oneDay'
     print("AlphaTrade folder:",ATFolder)
 
     ppo_config = {
@@ -547,7 +547,7 @@ if __name__ == "__main__":
         "LAMBDA":0.1,
         "GAMMA":10.0,
         "TASK_SIZE":500,
-        "RESULTS_FILE":"/homes/80/kang/AlphaTrade/results_file_"+f"{datetime.datetime.now().strftime('%m-%d_%H-%M')}",
+        "RESULTS_FILE":"/home/duser/AlphaTrade/results_file_"+f"{datetime.datetime.now().strftime('%m-%d_%H-%M')}",
     }
 
     if wandbOn:
