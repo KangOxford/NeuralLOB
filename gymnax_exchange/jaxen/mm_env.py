@@ -96,7 +96,9 @@ from gymnax.environments import environment, spaces
 # sys.path.append('/homes/80/kang/AlphaTrade')
 
 sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))
-sys.path.append('.')
+#sys.path.append('.')
+print(os.getcwd())
+print(os.listdir('/home/duser/AlphaTrade/training_oneDay/data/Flow_10'))
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 from gymnax_exchange.jaxen.base_env import BaseLOBEnv
 # ---------------------------------------------- 
@@ -1295,7 +1297,9 @@ if __name__ == "__main__":
         print("AlphaTrade folder:",ATFolder)
     except:
         # ATFolder = "./testing_oneDay"
-        ATFolder = "./training_oneDay"
+        #ATFolder = "/training_oneDay"
+        ATFolder = "/home/duser/AlphaTrade/training_oneDay"
+
         # ATFolder = '/home/duser/AlphaTrade'
         # ATFolder = '/homes/80/kang/AlphaTrade'
         # ATFolder = "/homes/80/kang/AlphaTrade/testing_oneDay"

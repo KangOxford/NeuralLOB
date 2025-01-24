@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04    
 
 # Set the working directory
 WORKDIR /home/duser
@@ -33,7 +33,7 @@ RUN pip install \
     
 
 # Install JAX and dependencies with specific versions
-RUN pip3 install --upgrade "jax[cuda]==0.4.16" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
+RUN pip3 install --upgrade "jaxlib==0.4.16+cuda12.cudnn89" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
    pip3 install --upgrade jaxlib==0.4.16 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && \
    pip3 install --upgrade flax==0.6.11 optax==0.1.7 jaxopt==0.8.1 brax==0.9.2 chex==0.1.8
    RUN pip3 install distrax==0.1.5 gym==0.26.2 gymnax==0.0.6 mujoco==2.3.7 tensorflow-probability==0.22.0 scipy==1.11.3
