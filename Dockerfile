@@ -67,8 +67,9 @@ RUN echo "alias i='/usr/local/bin/ipython'" >> ~/.bashrc
 RUN git config --global user.email "reuben@robots.ox.ac.uk"
 RUN git config --global user.name "reuben"
 
-##Rerun this at the end as it seems to need to be. IDK why?
-RUN pip3 install --upgrade "jax[cuda]==0.4.16" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+## Install JAX and dependencies with specific versions
+RUN pip3 install --upgrade "jax==0.4.16" "jaxlib==0.4.16+cuda12.cudnn89" \
+-f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 # Default command (can be overridden in the docker run command)
 CMD ["/bin/bash"]
