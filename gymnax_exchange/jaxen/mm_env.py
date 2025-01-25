@@ -98,7 +98,7 @@ from gymnax.environments import environment, spaces
 sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))
 #sys.path.append('.')
 print(os.getcwd())
-print(os.listdir('/home/duser/AlphaTrade/training_oneDay/data/Flow_10'))
+#print(os.listdir('/home/duser/AlphaTrade/training_oneDay/data/Flow_10'))
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 from gymnax_exchange.jaxen.base_env import BaseLOBEnv
 # ---------------------------------------------- 
