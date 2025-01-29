@@ -111,10 +111,10 @@ class RWKVWrapper:
     def __init__(self):
         self.model= rwkv6.ScanRWKV()
         # Get absolute paths using Pathlib
-        base_dir = Path.home() /"AlphaTrade"/"jax_rwkv"
-        
+        base_dir = Path.home() 
+     
         # Verify and load tokenizer
-        tokenizer_path = base_dir / "scripts" / "lob_tok.json"
+        tokenizer_path = base_dir /"AlphaTrade/gymnax_exchange/jaxlobster/lob_tok.json"
         if not tokenizer_path.exists():
             raise FileNotFoundError(f"Tokenizer file not found at: {tokenizer_path}")
             
@@ -124,7 +124,8 @@ class RWKVWrapper:
         )
 
         # Verify and load model components
-        model_dir = base_dir / "bptt_rwkv_6g0.1B"/"bptt_rwkv_6g0.1B"
+       
+        model_dir = base_dir /"AlphaTrade/jax_rwkv/bptt_rwkv_6g0.1B/"
         if not model_dir.exists():
             raise FileNotFoundError(f"Model directory not found at: {model_dir}")
 
@@ -174,6 +175,7 @@ if __name__ == "__main__":
     initial_context = jnp.zeros((100, 8))  # Match model's expected context window
     print(Path.home())
     # Create loader with warmup
+    #rwkv_model=RWKVWrapper()
     loader = GenLoader(
         model=GenLoader.dummy_model,
         initial_context=initial_context,
