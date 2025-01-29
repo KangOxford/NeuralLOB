@@ -175,7 +175,7 @@ if __name__ == "__main__":
     print(Path.home())
     # Create loader with warmup
     loader = GenLoader(
-        model=RWKVWrapper(),
+        model=GenLoader.dummy_model,
         initial_context=initial_context,
         initial_ob_state=jnp.zeros((2, 10)),
         n_messages=100
