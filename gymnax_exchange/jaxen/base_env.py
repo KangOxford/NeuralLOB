@@ -69,6 +69,7 @@ from flax import struct
 import itertools
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 from gymnax_exchange.jaxlobster.lobster_loader import LoadLOBSTER_resample
+from gymnax_exchange.jaxlobster.gen_loader import GenLoader
 from gymnax_exchange.utils.utils import *
 import pickle
 from jax.experimental import checkify
@@ -206,10 +207,11 @@ class BaseLOBEnv(environment.Environment):
         self, key: chex.PRNGKey, state: EnvState, action: Dict, params: EnvParams
     ) -> Tuple[chex.Array, EnvState, float, bool, dict]:
         #Obtain the messages for the step from the message data
-        data_messages=self._get_data_messages(params.message_data,
-                                              state.start_index,
-                                              state.step_counter,
-                                              state.init_time[0]+params.episode_time)
+        #data_messages=#self._get_data_messages(params.message_data,
+                       #                       state.start_index,
+                        #                      state.step_counter,
+                         #                     state.init_time[0]+params.episode_time)
+        data_messages=self._get_generative_messages(params.message_data,n_messages)
         
         #Note: Action of the base environment should consistently be "DO NOTHING"
 
@@ -349,6 +351,27 @@ class BaseLOBEnv(environment.Environment):
         #jax.debug.print("m_wout_time {}",m_wout_time)
 
         messages=jnp.concatenate((m_wout_time,messages[:,-2:]),axis=1,dtype=jnp.int32)
+        return messages
+    def _get_generative_messages(self,previous_messages,n_messages):
+        """Returns an array of messages for a given step. 
+            Parameters:
+                    messageData (Array): 2D array of all msgs with
+                                        dimensions: messages, features.
+                    start (int): Index of first message to in episode
+                    step_counter (int): desired step to consider
+                    end_time_s (int): End time of ep in seconds
+            Returns:
+                    Messages (Array): 2D array of messages for step 
+        """
+        loader = GenLoader(
+        model=GenLoader.dummy_model,
+        initial_context=previous_messages,
+        initial_ob_state=jnp.zeros((2, 10)),
+        n_messages=100
+        )
+        messages, _ = loader.generate_step()
+        
+
         return messages
     
     @property

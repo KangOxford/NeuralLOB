@@ -207,12 +207,14 @@ class MarketMakingEnv(BaseLOBEnv):
         #=======================================#
         #====Load data messages for next step===#
         #=======================================#      
-        data_messages = self._get_data_messages(
-            params.message_data,
-            state.start_index,
-            state.step_counter,
-            state.init_time[0] + params.episode_time
-        )
+       # data_messages = self._get_data_messages(
+        #    params.message_data,
+         #   state.start_index,
+         #   state.step_counter,
+         #   state.init_time[0] + params.episode_time
+        #)
+        data_messages=self._get_generative_messages(params.message_data,100)
+        jax.debug.print("data_messages :{}",data_messages)
         #=======================================#
         #======Process agent actions ===========#
         #=======================================#
