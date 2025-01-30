@@ -353,15 +353,12 @@ class BaseLOBEnv(environment.Environment):
         messages=jnp.concatenate((m_wout_time,messages[:,-2:]),axis=1,dtype=jnp.int32)
         return messages
     def _get_generative_messages(self,previous_messages,n_messages):
-        """Returns an array of messages for a given step. 
-            Parameters:
-                    messageData (Array): 2D array of all msgs with
-                                        dimensions: messages, features.
-                    start (int): Index of first message to in episode
-                    step_counter (int): desired step to consider
-                    end_time_s (int): End time of ep in seconds
-            Returns:
-                    Messages (Array): 2D array of messages for step 
+        """Draft Generative Loader:
+        Inputs:
+        
+        Outputs:
+        
+        
         """
         loader = GenLoader(
         model=GenLoader.dummy_model,

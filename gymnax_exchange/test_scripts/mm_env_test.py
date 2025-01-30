@@ -18,7 +18,7 @@ faulthandler.enable()
 # ============================
 # Configuration
 # ============================
-test_steps = 1500 # Adjusted for your test case; make sure this isn't too high
+test_steps = 15000 # Adjusted for your test case; make sure this isn't too high
 
 if __name__ == "__main__":
     try:
@@ -35,7 +35,7 @@ if __name__ == "__main__":
         "ACTION_TYPE": "pure",
         "REWARD_LAMBDA": 0.1,
         "EP_TYPE": "fixed_time",
-        "EPISODE_TIME": 60*60,  # 
+        "EPISODE_TIME": 240,  # 
     }
 
     # Set up random keys for JAX
@@ -120,7 +120,7 @@ if __name__ == "__main__":
         key_policy, _ = jax.random.split(key_policy, 2)
         key_step, _ = jax.random.split(key_step, 2)
         #test_action= test_action = env.action_space().sample(key_policy) 
-        test_action = jnp.array([0,0])
+        test_action = 1
         
         start = time.time()
         obs, state, reward, done, info = env.step(key_step, state, test_action, env_params)

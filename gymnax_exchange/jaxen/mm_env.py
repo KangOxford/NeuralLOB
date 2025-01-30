@@ -207,21 +207,30 @@ class MarketMakingEnv(BaseLOBEnv):
         #=======================================#
         #====Load data messages for next step===#
         #=======================================#      
-       # data_messages = self._get_data_messages(
-        #    params.message_data,
-         #   state.start_index,
-         #   state.step_counter,
-         #   state.init_time[0] + params.episode_time
-        #)
-        data_messages=self._get_generative_messages(params.message_data,100)
-        jax.debug.print("data_messages :{}",data_messages)
+        data_messages = self._get_data_messages(
+            params.message_data,
+            state.start_index,
+            state.step_counter,
+            state.init_time[0] + params.episode_time
+        )
+        #data_messages=self._get_generative_messages(params.message_data,100)
+       # jax.debug.print("data_messages :{}",data_messages)
         #=======================================#
         #======Process agent actions ===========#
         #=======================================#
         #jax.debug.print("action :{}",input_action)
+        def one_hot_action(action: int, n_actions: int):
+            return jnp.full((n_actions,), action, dtype=jnp.int32)  # Fill the array with the action value
+
+
+        
+        input_action = one_hot_action(input_action, self.n_actions)
+        
         action = self._reshape_action(input_action, state, params,key)
+        #jax.debug.print("action:{}",action)
         action_msgs = self._getActionMsgs(action, state, params)
         action_prices = action_msgs[:, 3]
+        #jax.debug.print("action_msgs:{}",action_msgs)
 
         #Cancel all previous agent orders each step, send fresh
         #This has been made redundant by the force_market_order_if_done fn
@@ -250,6 +259,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
         # Add to the top of the data messages
         total_messages = jnp.concatenate([cnl_msgs, action_msgs, data_messages], axis=0)
+        jax.debug.print("total_messages :{}",total_messages)
         # Save time of final message to add to state
         time = total_messages[-1, -2:]
         # To only ever consider the trades from the last step simply replace state.trades with an array of -1s of the same size. 
@@ -292,7 +302,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
         # TODO: use the agent quant identification from the separate function _get_executed_by_level instead of _get_reward
         reward, extras = self._get_reward(state, params, trades,bestasks,bestbids)
-      
+        
         state = EnvState(
             prev_action = jnp.vstack([action_prices, action]).T,  # includes prices and quantitites 
             #TODO: implement prev_executed and get this on the state. 
@@ -322,8 +332,12 @@ class MarketMakingEnv(BaseLOBEnv):
             quant_ask_passive_2=quant_ask_passive_2,            
             delta_time = new_time[0] + new_time[1]/1e9 - state.time[0] - state.time[1]/1e9,
         )
-       # jax.debug.print("state.inv :{}",state.inventory)
+        #jax.debug.print("state.inv :{}",state.inventory)
+        #jax.debug.print("reward:{}",reward)
         done = self.is_terminal(state, params)
+        #jax.debug.print("inventory:{}",state.inventory)
+        #jax.debug.print("reward :{}",reward)
+        #jax.debug.print("done:{}",done)
         average_best_bid=bestbids[:, 0].mean()// self.tick_size * self.tick_size
         average_best_ask=bestasks[:, 0].mean()// self.tick_size * self.tick_size
 
@@ -371,6 +385,8 @@ class MarketMakingEnv(BaseLOBEnv):
           as 5 seconds before the end of the episode or one step before """
         if self.ep_type == 'fixed_time':
             # TODO: make the 5 sec a function of the step size
+            time_left=(params.episode_time - (state.time - state.init_time)[0] )
+            #jax.debug.print("time_left :{}",time_left)
             return (
                 (params.episode_time - (state.time - state.init_time)[0] <= 5)  # time over (last 5 seconds)
             )
@@ -434,7 +450,7 @@ class MarketMakingEnv(BaseLOBEnv):
             quants = jnp.where(ifMarketOrder,market_quants,limit_quants)
             # ---------- quants ----------
             return jnp.array(quants) 
-        
+      
         #we don't use truncate_actoin, we can trade into negative inventory etc
         def truncate_action(action, remainQuant):
             action = jnp.round(action).clip(0, remainQuant).astype(jnp.int32)
@@ -741,9 +757,9 @@ class MarketMakingEnv(BaseLOBEnv):
         # --------------- 02 info for deciding prices ---------------
         #best_ask, best_bid = state.best_asks[-1, 0], state.best_bids[-1, 0]
         #Trade off the average over the last 100 messages to avoid the variance:
-        #best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
-        #best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
-        best_ask, best_bid = state.best_asks[-1, 0], state.best_bids[-1, 0]
+        best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        #best_ask, best_bid = state.best_asks[-1, 0], state.best_bids[-1, 0]
 
         sell_levels=sell_task_prices(best_ask, best_bid)
         sell_levels = jnp.array(sell_levels[:-1])
@@ -758,6 +774,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
    
         quants = action.astype(jnp.int32)
+        #quants=jnp.array([0,0])
         prices=price_levels
      
         #quants, prices = normal_quant_price(price_levels, action)
@@ -995,7 +1012,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
         #Lamda weighted, non directional#
         # Multiply PnL from inventory with small lambda to dampen the effect
-        #reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
+        reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
 
        
 
@@ -1004,7 +1021,7 @@ class MarketMakingEnv(BaseLOBEnv):
         #reward=buyPnL+sellPnL 
         undamped_reward=buyPnL+sellPnL+InventoryPnL
 
-        reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL) # Asymmetrically dampened PnL
+       # reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL) # Asymmetrically dampened PnL
 
         #More complex reward function (should be added as part of the env if we actually use them):
         inventoryPnL_lambda = 0.002
@@ -1019,10 +1036,10 @@ class MarketMakingEnv(BaseLOBEnv):
             jnp.abs(inventory_delta) * (avg_sell_price - averageMidprice) / self.tick_size # Excess sells
         )
   
-        reward = approx_realized_pnl + unrealizedPnL_lambda * approx_unrealized_pnl +  inventoryPnL_lambda * jnp.minimum(InventoryPnL,InventoryPnL*asymmetrically_dampened_lambda) #Last term adds negative inventory PnL without dampening
+        #reward = approx_realized_pnl + unrealizedPnL_lambda * approx_unrealized_pnl +  inventoryPnL_lambda * jnp.minimum(InventoryPnL,InventoryPnL*asymmetrically_dampened_lambda) #Last term adds negative inventory PnL without dampening
        
         reward= -jnp.abs(new_inventory)
-        #reward = jnp.clip(reward, -10, 10)
+        
 
 
         # Define a penalty if he exceeds a certain inventory
@@ -1046,9 +1063,10 @@ class MarketMakingEnv(BaseLOBEnv):
 
         # ---------- normalize the reward ----------#
         # reward /= 10_000
-        reward_scaled = reward / 100_000
+        reward_scaled = reward / 1000
+        #reward_scaled = jnp.clip(reward_scaled, -0.1, 0.1)
         # reward /= params.avg_twap_list[state.window_index]
-       
+        #jax.debug.print("new_inventory:{}",new_inventory)
         return reward, {
             "market_share": market_share,
             "undamped_reward":undamped_reward,
@@ -1265,7 +1283,8 @@ class MarketMakingEnv(BaseLOBEnv):
             return spaces.Box(-100, 100, (self.n_actions,), dtype=jnp.int32)
         else:
             # return spaces.Box(0, 100, (self.n_actions,), dtype=jnp.int32)
-            return spaces.Box(0, self.max_task_size, (self.n_actions,), dtype=jnp.int32)
+            
+            return spaces.Discrete(self.n_actions)
     
        
 
@@ -1274,7 +1293,7 @@ class MarketMakingEnv(BaseLOBEnv):
         """Observation space of the environment."""
         #space = spaces.Box(-10,10,(809,),dtype=jnp.float32) 
         # space = spaces.Box(-10, 10, (21,), dtype=jnp.float32) 
-        space = spaces.Box(-10, 10, (37,), dtype=jnp.float32) 
+        space = spaces.Box(-10, 10, (25,), dtype=jnp.float32) 
         return space
 
     def state_space(self, params: EnvParams) -> spaces.Dict:
@@ -1350,15 +1369,15 @@ if __name__ == "__main__":
     
 
     # print(env_params.message_data.shape, env_params.book_data.shape)
-    for i in range(1,20):
+    for i in range(1,1500):
          # ==================== ACTION ====================
         # ---------- acion from random sampling ----------
         print("-"*20)
         key_policy, _ = jax.random.split(key_policy, 2)
         key_step, _ = jax.random.split(key_step, 2)
         # test_action=env.action_space().sample(key_policy)
-        test_action = env.action_space().sample(key_policy) // 10
-        jax.debug.print("test_action :{}",test_action)
+        test_action = env.action_space().sample(key_policy) 
+        #jax.debug.print("test_action :{}",test_action)
        # test_action=jnp.array([100,100,100,100,10,10])
         #env.action_space().sample(key_policy) // 10
         # test_action = jnp.array([100, 10])

@@ -7,8 +7,8 @@ import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 import distrax
 
-from purejaxrl.experimental.s5.s5 import StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
-from purejaxrl.experimental.s5.wrappers import FlattenObservationWrapper, LogWrapper
+from purejaxrl.purejaxrl.experimental.s5.s5 import StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
+from purejaxrl.purejaxrl.experimental.s5.wrappers import FlattenObservationWrapper, LogWrapper
 
 
 d_model = 64  # === HIDDEN_SIZE

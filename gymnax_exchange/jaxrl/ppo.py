@@ -27,8 +27,8 @@ sys.path.append('.')
 
 #sys.path.append('../AlphaTrade/purejaxrl')
 #sys.path.append('../AlphaTrade')
-from purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
-from purejaxrl.experimental.s5.s5 import StackedEncoderModel#, init_S5SSM, make_DPLR_HiPPO
+from purejaxrl.purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
+from purejaxrl.purejaxrl.experimental.s5.s5 import StackedEncoderModel#, init_S5SSM, make_DPLR_HiPPO
 from gymnax_exchange.jaxen.exec_env import ExecutionEnv
 #from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
 from gymnax_exchange.jaxrl.actorCritic import ActorCriticRNN, ScannedRNN
@@ -203,6 +203,7 @@ def make_train(config):
             def _env_step(runner_state, action_noise):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
                 rng, _rng = jax.random.split(rng)
+                
 
                 # SELECT ACTION
                 ac_in = (last_obs[jnp.newaxis, :], last_done[jnp.newaxis, :])
@@ -220,7 +221,7 @@ def make_train(config):
                 log_prob = pi.log_prob(action // config["REDUCE_ACTION_SPACE_BY"])
 
                 # print('action {}, log_prob {}', action.shape, log_prob.shape)
-                # jax.debug.print('action {}, log_prob {}', action, log_prob)
+                #jax.debug.print('action {}, log_prob {}', action, log_prob)
 
                 value, action, log_prob = (
                     value.squeeze(0),
@@ -271,7 +272,7 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
-                    # jax.debug.print('value {} reward {}', value, reward)
+                    #jax.debug.print('value {} reward {}', value, reward)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                         delta
@@ -375,6 +376,7 @@ def make_train(config):
                         )
                         log_prob = pi.log_prob(traj_batch.action // config["REDUCE_ACTION_SPACE_BY"])
                         activations = network_state["intermediates"]
+                        #jax.debug.print("activations:{}",activations)
                         dead_ratio = _dead_neuron_ratio(activations)
                         # norm of trajectory batch observation
                         obs_norm = jnp.sqrt((traj_batch.obs**2).sum(axis=-1)).mean()

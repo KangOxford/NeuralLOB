@@ -173,7 +173,7 @@ if __name__ == "__main__":
   
     # Initialize with proper context shape
     initial_context = jnp.zeros((100, 8))  # Match model's expected context window
-    print(Path.home())
+    #print(Path.home())
     # Create loader with warmup
     #rwkv_model=RWKVWrapper()
     loader = GenLoader(
