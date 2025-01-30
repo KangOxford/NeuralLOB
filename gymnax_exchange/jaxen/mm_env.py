@@ -259,7 +259,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
         # Add to the top of the data messages
         total_messages = jnp.concatenate([cnl_msgs, action_msgs, data_messages], axis=0)
-        jax.debug.print("total_messages :{}",total_messages)
+        #jax.debug.print("total_messages :{}",total_messages)
         # Save time of final message to add to state
         time = total_messages[-1, -2:]
         # To only ever consider the trades from the last step simply replace state.trades with an array of -1s of the same size. 
@@ -1038,7 +1038,7 @@ class MarketMakingEnv(BaseLOBEnv):
   
         #reward = approx_realized_pnl + unrealizedPnL_lambda * approx_unrealized_pnl +  inventoryPnL_lambda * jnp.minimum(InventoryPnL,InventoryPnL*asymmetrically_dampened_lambda) #Last term adds negative inventory PnL without dampening
        
-        reward= -jnp.abs(new_inventory)
+        reward= -jnp.abs(state.inventory)
         
 
 
