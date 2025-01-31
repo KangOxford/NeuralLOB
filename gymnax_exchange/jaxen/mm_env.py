@@ -174,7 +174,7 @@ class MarketMakingEnv(BaseLOBEnv):
         self.market_share=0.
         self.rewardLambda = rewardLambda #
         # TODO: fix!! this can be overwritten in the base class
-        self.n_actions = 2 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
+        self.n_actions = 4 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
         
         super().__init__(
             alphatradePath,
@@ -219,16 +219,16 @@ class MarketMakingEnv(BaseLOBEnv):
         #======Process agent actions ===========#
         #=======================================#
         #jax.debug.print("action :{}",input_action)
-        def one_hot_action(action: int, n_actions: int):
-            return jnp.full((n_actions,), action, dtype=jnp.int32)  # Fill the array with the action value
+        #def one_hot_action(action: int, n_actions: int):
+         #   return jnp.full((n_actions,), action, dtype=jnp.int32)  # Fill the array with the action value
 
 
-        
-        input_action = one_hot_action(input_action, self.n_actions)
-        
+        #jax.debug.print("input_action.shape[0]:{}",input_action.shape[0])
+        #input_action = one_hot_action(input_action, self.n_actions)
+        #input_action=jnp.array([input_action])
         action = self._reshape_action(input_action, state, params,key)
         #jax.debug.print("action:{}",action)
-        action_msgs = self._getActionMsgs(action, state, params)
+        action_msgs = self._getActionMsgsV3(action, state, params)
         action_prices = action_msgs[:, 3]
         #jax.debug.print("action_msgs:{}",action_msgs)
 
@@ -237,13 +237,13 @@ class MarketMakingEnv(BaseLOBEnv):
         cnl_msg_bid = job.getCancelMsgs(
             state.bid_raw_orders,
             self.trader_unique_id,
-            self.n_actions//2, 
+            1,#self.n_actions//2, 
             1  # bids
         )
         cnl_msg_ask = job.getCancelMsgs(
             state.ask_raw_orders,
             self.trader_unique_id,
-            self.n_actions//2,
+            1,#self.n_actions//2,
             -1  # ask side
         )
         cnl_msgs = jnp.concatenate([cnl_msg_bid, cnl_msg_ask], axis=0)
@@ -294,7 +294,7 @@ class MarketMakingEnv(BaseLOBEnv):
         #         bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
         bestasks = jnp.concatenate([bestasks,bestasks[-1:,:] ], axis=0, dtype=jnp.int32)
         bestbids = jnp.concatenate([bestbids, bestbids[-1:,:]], axis=0, dtype=jnp.int32)
-        new_id_counter = state.customIDcounter + self.n_actions + 1
+        new_id_counter = state.customIDcounter + 3#self.n_actions + 1
         new_time = time + params.time_delay_obs_act
 
         bid_passive_2,quant_bid_passive_2,ask_passive_2,quant_ask_passive_2 = self._get_pass_price_quant(state)
@@ -304,7 +304,7 @@ class MarketMakingEnv(BaseLOBEnv):
         reward, extras = self._get_reward(state, params, trades,bestasks,bestbids)
         
         state = EnvState(
-            prev_action = jnp.vstack([action_prices, action]).T,  # includes prices and quantitites 
+            prev_action = action_prices,#jnp.vstack([action_prices, action]).T,  # includes prices and quantitites 
             #TODO: implement prev_executed and get this on the state. 
             prev_executed = executions, # include prices and quantities 
             ask_raw_orders = asks,
@@ -415,8 +415,10 @@ class MarketMakingEnv(BaseLOBEnv):
 
         return EnvState(
             *base_vals,
-            prev_action=jnp.zeros((self.n_actions, 2), jnp.int32),
-            prev_executed=jnp.zeros((self.n_actions,2 ), jnp.int32),
+           # prev_action=jnp.zeros((self.n_actions, 2), jnp.int32),
+            #prev_executed=jnp.zeros((self.n_actions,2 ), jnp.int32),
+            prev_action=jnp.zeros((2), jnp.int32),#jnp.zeros((2 ,2), jnp.int32),
+            prev_executed=jnp.zeros((2,2 ), jnp.int32),
             best_asks=jnp.resize(best_ask,(self.stepLines,2)),
             best_bids=jnp.resize(best_bid,(self.stepLines,2)),
             init_price=M,
@@ -565,8 +567,8 @@ class MarketMakingEnv(BaseLOBEnv):
         TODO: make this more general for aggressive actions?
         """
         price_levels, r_idx = jnp.unique(
-            agent_trades[:, 0], return_inverse=True, size=self.n_actions+1, fill_value=0)
-        quant_by_price = jax.ops.segment_sum(jnp.abs(agent_trades[:, 1]), r_idx, num_segments=self.n_actions+1)
+            agent_trades[:, 0], return_inverse=True, size=3, fill_value=0)#self.n_actions+1
+        quant_by_price = jax.ops.segment_sum(jnp.abs(agent_trades[:, 1]), r_idx, num_segments=3)#self.n_actions+1
         price_quants = jnp.vstack((price_levels[1:], quant_by_price[1:])).T
         return price_quants
     
@@ -613,7 +615,7 @@ class MarketMakingEnv(BaseLOBEnv):
 
         # Create masks for valid indices
         valid_indices = price_to_index >= 0
-        num_prices = self.n_actions
+        num_prices = 2#self.n_actions
 
         # Mask trades and indices instead of boolean indexing
         valid_trades = jnp.where(valid_indices, agent_trades[:, 1], 0)
@@ -670,7 +672,110 @@ class MarketMakingEnv(BaseLOBEnv):
         # jax.debug.print("actions {} \n price_quants {} \n", actions, price_quants)
         # return quants only (aggressive prices could be multiple)
        # return price_quants
-    
+    def _getActionMsgsV2(self, action: jax.Array, state: EnvState, params: EnvParams):
+        '''Transform discrete action into bid and ask order messages based on current best prices.'''
+        # Compute best_ask and best_bid using a rolling average to reduce variance
+        best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        
+        # Convert action to integer scalar (assuming action is a single-element array)
+        #action = jax.lax.convert_element_type(action[0], jnp.int32)  # Ensure it's a scalar
+        
+        # Define mappings for each action: [0-7]
+        bid_offsets = jnp.array([0, 0, 1, -1, -1, 1, 0, 0], dtype=jnp.int32)
+        ask_offsets = jnp.array([0, 0, -1, 1, -1, 1, 0, 0], dtype=jnp.int32)
+        bid_quants = jnp.array([0, 1, 1, 1, 1, 1, 0, 1], dtype=jnp.int32)
+        ask_quants = jnp.array([0, 1, 1, 1, 1, 1, 1, 0], dtype=jnp.int32)
+        
+        tick_offset = self.n_ticks_in_book * self.tick_size  # Total price offset per direction
+        
+        # Get parameters for current action
+        bid_offset = bid_offsets[action]
+        ask_offset = ask_offsets[action]
+        bid_quant = bid_quants[action]
+        ask_quant = ask_quants[action]
+        
+        # Calculate prices with bounds checking
+        bid_price = best_bid + bid_offset * tick_offset
+        ask_price = best_ask + ask_offset * tick_offset
+        bid_price = jnp.maximum(bid_price, 0)  # Prevent negative prices
+        ask_price = jnp.maximum(ask_price, 0)
+        
+        # --------------- Construct messages ---------------
+        # Message components (2 messages: bid then ask)
+        types = jnp.array([1, 1], dtype=jnp.int32)  # 1=limit order
+        sides = jnp.array([1, -1], dtype=jnp.int32)  # 1=bid, -1=ask
+        quants = jnp.array([bid_quant, ask_quant], dtype=jnp.int32)
+        prices = jnp.array([bid_price, ask_price], dtype=jnp.int32)
+        trader_ids = jnp.full(2, self.trader_unique_id, dtype=jnp.int32)
+        
+        # Generate unique order IDs
+        base_id = self.trader_unique_id + state.customIDcounter
+        order_ids = base_id + jnp.array([0, 1], dtype=jnp.int32)
+        
+        # Time fields (replicated for each message)
+        times = jnp.resize(
+            state.time + params.time_delay_obs_act,
+            (2, 2)  # Shape (2 messages, 2 time fields)
+        )
+        
+        # Stack components into message array
+        action_msgs = jnp.stack([types, sides, quants, prices, trader_ids, order_ids], axis=1)
+        action_msgs = jnp.concatenate([action_msgs, times], axis=1)
+        
+        return action_msgs
+    def _getActionMsgsV3(self, action: jax.Array, state: EnvState, params: EnvParams):
+        '''Transform discrete action into bid and ask order messages based on current best prices.'''
+        # Compute best_ask and best_bid using a rolling average to reduce variance
+        best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        
+        # Convert action to integer scalar (assuming action is a single-element array)
+        #action = jax.lax.convert_element_type(action[0], jnp.int32)  # Ensure it's a scalar
+        
+        # Define mappings for each action: [0-7]
+        #bid_offsets = jnp.array([0, 0, 1, -1, -1, 1, 0, 0], dtype=jnp.int32)
+        #ask_offsets = jnp.array([0, 0, -1, 1, -1, 1, 0, 0], dtype=jnp.int32)
+        bid_quants = jnp.array([0, 1, 0, 1], dtype=jnp.int32)
+        ask_quants = jnp.array([0, 1, 1, 0], dtype=jnp.int32)
+        
+        tick_offset = self.n_ticks_in_book * self.tick_size  # Total price offset per direction
+        
+        # Get parameters for current action
+        #bid_offset = bid_offsets[action]
+        #ask_offset = ask_offsets[action]
+        bid_quant = bid_quants[action]
+        ask_quant = ask_quants[action]
+        
+        # Calculate prices with bounds checking
+        bid_price = best_bid #+ bid_offset * tick_offset
+        ask_price = best_ask #+ ask_offset * tick_offset
+        bid_price = jnp.maximum(bid_price, 0)  # Prevent negative prices
+        ask_price = jnp.maximum(ask_price, 0)
+        
+        # --------------- Construct messages ---------------
+        # Message components (2 messages: bid then ask)
+        types = jnp.array([1, 1], dtype=jnp.int32)  # 1=limit order
+        sides = jnp.array([1, -1], dtype=jnp.int32)  # 1=bid, -1=ask
+        quants = jnp.array([bid_quant, ask_quant], dtype=jnp.int32)
+        prices = jnp.array([bid_price, ask_price], dtype=jnp.int32)
+        trader_ids = jnp.full(2, self.trader_unique_id, dtype=jnp.int32)
+        
+        # Generate unique order IDs
+        base_id = self.trader_unique_id + state.customIDcounter
+        order_ids = base_id + jnp.array([0, 1], dtype=jnp.int32)
+        
+        # Time fields (replicated for each message)
+        times = jnp.resize(
+            state.time + params.time_delay_obs_act,
+            (2, 2)  # Shape (2 messages, 2 time fields)
+        )
+        
+        # Stack components into message array
+        action_msgs = jnp.stack([types, sides, quants, prices, trader_ids, order_ids], axis=1)
+        action_msgs = jnp.concatenate([action_msgs, times], axis=1)
+        
+        return action_msgs
     def _getActionMsgs(self, action: jax.Array, state: EnvState, params: EnvParams):
         '''Shape the action quantities in to messages sent the order book at the 
         prices levels determined from the orderbook'''
@@ -1012,16 +1117,16 @@ class MarketMakingEnv(BaseLOBEnv):
 
         #Lamda weighted, non directional#
         # Multiply PnL from inventory with small lambda to dampen the effect
-        reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
+        #reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
 
        
 
         # Other versions of reward
-        #reward=buyPnL+sellPnL + InventoryPnL # full speculation
-        #reward=buyPnL+sellPnL 
+        #reward=buyPnL+sellPnL +InventoryPnL # full speculation
+        reward=buyPnL+sellPnL -jnp.abs(state.inventory)
         undamped_reward=buyPnL+sellPnL+InventoryPnL
 
-       # reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL) # Asymmetrically dampened PnL
+        #reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL) # Asymmetrically dampened PnL
 
         #More complex reward function (should be added as part of the env if we actually use them):
         inventoryPnL_lambda = 0.002
@@ -1047,6 +1152,7 @@ class MarketMakingEnv(BaseLOBEnv):
         penalty_amount = 500.0 
         penalty = jnp.where(jnp.abs(state.inventory) > penalty_threshold, penalty_amount, 0.0)
         #reward = reward - penalty
+        
         
         
         
@@ -1116,7 +1222,7 @@ class MarketMakingEnv(BaseLOBEnv):
             "step_counter": state.step_counter,
             "max_steps": state.max_steps_in_episode,
             "remaining_ratio": jnp.where(state.max_steps_in_episode==0, 0., 1. - state.step_counter / state.max_steps_in_episode),
-            "prev_action": state.prev_action[:, 1],  # use quants only
+            "prev_action": state.prev_action,  # use quants only
             "prev_executed": state.prev_executed,  # use quants only
           #  "prev_executed_ratio": jnp.where(state.prev_action[:, 1]==0., 0., state.prev_executed / state.prev_action[:, 1]),
             
@@ -1285,6 +1391,7 @@ class MarketMakingEnv(BaseLOBEnv):
             # return spaces.Box(0, 100, (self.n_actions,), dtype=jnp.int32)
             
             return spaces.Discrete(self.n_actions)
+            #return spaces.Box(0, 2, (self.n_actions,), dtype=jnp.int32)
     
        
 
@@ -1377,8 +1484,8 @@ if __name__ == "__main__":
         key_step, _ = jax.random.split(key_step, 2)
         # test_action=env.action_space().sample(key_policy)
         test_action = env.action_space().sample(key_policy) 
-        #jax.debug.print("test_action :{}",test_action)
-       # test_action=jnp.array([100,100,100,100,10,10])
+        jax.debug.print("test_action :{}",test_action)
+        #test_action=0
         #env.action_space().sample(key_policy) // 10
         # test_action = jnp.array([100, 10])
         print(f"Sampled {i}th actions are: ", test_action)
