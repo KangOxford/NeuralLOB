@@ -228,7 +228,7 @@ class MarketMakingEnv(BaseLOBEnv):
         #input_action=jnp.array([input_action])
         action = self._reshape_action(input_action, state, params,key)
         #jax.debug.print("action:{}",action)
-        action_msgs = self._getActionMsgsV3(action, state, params)
+        action_msgs = self._getActionMsgsV2(action, state, params)
         action_prices = action_msgs[:, 3]
         #jax.debug.print("action_msgs:{}",action_msgs)
 
@@ -363,6 +363,7 @@ class MarketMakingEnv(BaseLOBEnv):
             "approx_realized_pnl":extras["approx_realized_pnl"],
             "approx_unrealized_pnl": extras["approx_unrealized_pnl"]
         }
+       
         return self._get_obs(state, params), state, reward, done, info
     
 
@@ -724,58 +725,7 @@ class MarketMakingEnv(BaseLOBEnv):
         action_msgs = jnp.concatenate([action_msgs, times], axis=1)
         
         return action_msgs
-    def _getActionMsgsV3(self, action: jax.Array, state: EnvState, params: EnvParams):
-        '''Transform discrete action into bid and ask order messages based on current best prices.'''
-        # Compute best_ask and best_bid using a rolling average to reduce variance
-        best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
-        best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
-        
-        # Convert action to integer scalar (assuming action is a single-element array)
-        #action = jax.lax.convert_element_type(action[0], jnp.int32)  # Ensure it's a scalar
-        
-        # Define mappings for each action: [0-7]
-        #bid_offsets = jnp.array([0, 0, 1, -1, -1, 1, 0, 0], dtype=jnp.int32)
-        #ask_offsets = jnp.array([0, 0, -1, 1, -1, 1, 0, 0], dtype=jnp.int32)
-        bid_quants = jnp.array([0, 1, 0, 1], dtype=jnp.int32)
-        ask_quants = jnp.array([0, 1, 1, 0], dtype=jnp.int32)
-        
-        tick_offset = self.n_ticks_in_book * self.tick_size  # Total price offset per direction
-        
-        # Get parameters for current action
-        #bid_offset = bid_offsets[action]
-        #ask_offset = ask_offsets[action]
-        bid_quant = bid_quants[action]
-        ask_quant = ask_quants[action]
-        
-        # Calculate prices with bounds checking
-        bid_price = best_bid #+ bid_offset * tick_offset
-        ask_price = best_ask #+ ask_offset * tick_offset
-        bid_price = jnp.maximum(bid_price, 0)  # Prevent negative prices
-        ask_price = jnp.maximum(ask_price, 0)
-        
-        # --------------- Construct messages ---------------
-        # Message components (2 messages: bid then ask)
-        types = jnp.array([1, 1], dtype=jnp.int32)  # 1=limit order
-        sides = jnp.array([1, -1], dtype=jnp.int32)  # 1=bid, -1=ask
-        quants = jnp.array([bid_quant, ask_quant], dtype=jnp.int32)
-        prices = jnp.array([bid_price, ask_price], dtype=jnp.int32)
-        trader_ids = jnp.full(2, self.trader_unique_id, dtype=jnp.int32)
-        
-        # Generate unique order IDs
-        base_id = self.trader_unique_id + state.customIDcounter
-        order_ids = base_id + jnp.array([0, 1], dtype=jnp.int32)
-        
-        # Time fields (replicated for each message)
-        times = jnp.resize(
-            state.time + params.time_delay_obs_act,
-            (2, 2)  # Shape (2 messages, 2 time fields)
-        )
-        
-        # Stack components into message array
-        action_msgs = jnp.stack([types, sides, quants, prices, trader_ids, order_ids], axis=1)
-        action_msgs = jnp.concatenate([action_msgs, times], axis=1)
-        
-        return action_msgs
+    
     def _getActionMsgs(self, action: jax.Array, state: EnvState, params: EnvParams):
         '''Shape the action quantities in to messages sent the order book at the 
         prices levels determined from the orderbook'''

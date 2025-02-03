@@ -27,7 +27,7 @@ import dataclasses
 
 from purejaxrl.purejaxrl.wrappers import LogWrapper, FlattenObservationWrapper
 
-wandbOn = False # False
+wandbOn = True # False
 if wandbOn:
     import wandb
 
@@ -347,7 +347,7 @@ if __name__ == "__main__":
         "LR": 2.5e-4,
         "NUM_ENVS": 256,
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 6e7,
+        "TOTAL_TIMESTEPS": 2e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16,
         "GAMMA": 0.99,
@@ -385,6 +385,52 @@ if __name__ == "__main__":
 
     print(f"Results will be saved to {params_file_name}")
 
-    rng = jax.random.PRNGKey(30)
+    # +++++ Single GPU +++++
+    rng = jax.random.PRNGKey(0)
+    # rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config))
+ 
     out = train_jit(rng)
+  
+    # +++++ Single GPU +++++
+
+    # # +++++ Multiple GPUs +++++
+    # num_devices = 4F
+    # rng = jax.random.PRNGKey(30)
+    # rngs = jax.random.split(rng, num_devices)
+    # train_fn = lambda rng: make_train(ppo_config)(rng)
+    # start=time.time()
+    # out = jax.pmap(train_fn)(rngs)
+    # print("Time: ", time.time()-start)
+    # # +++++ Multiple GPUs +++++
+    
+    
+
+    # '''
+    # # ---------- Save Output ----------
+    import flax
+
+    train_state = out['runner_state'][0] # runner_state.train_state
+    params = train_state.params
+    
+
+
+    import datetime;params_file_name = f'params_file_{wandb.run.name}_{datetime.datetime.now().strftime("%m-%d_%H-%M")}'
+
+    # Save the params to a file using flax.serialization.to_bytes
+    with open(params_file_name, 'wb') as f:
+        f.write(flax.serialization.to_bytes(params))
+        print(f"params saved")
+
+    # Load the params from the file using flax.serialization.from_bytes
+    with open(params_file_name, 'rb') as f:
+        restored_params = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        print(f"params restored")
+        
+    # jax.debug.breakpoint()
+    # assert jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), params, restored_params))
+    # print(">>>")
+    # '''
+
+    if wandbOn:
+        run.finish()
