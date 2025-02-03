@@ -174,7 +174,7 @@ class MarketMakingEnv(BaseLOBEnv):
         self.market_share=0.
         self.rewardLambda = rewardLambda #
         # TODO: fix!! this can be overwritten in the base class
-        self.n_actions = 4 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
+        self.n_actions = 8 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
         
         super().__init__(
             alphatradePath,
@@ -676,8 +676,8 @@ class MarketMakingEnv(BaseLOBEnv):
     def _getActionMsgsV2(self, action: jax.Array, state: EnvState, params: EnvParams):
         '''Transform discrete action into bid and ask order messages based on current best prices.'''
         # Compute best_ask and best_bid using a rolling average to reduce variance
-        best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
-        best_bid = jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        best_ask = jnp.int32((state.best_asks[-50:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        best_bid = jnp.int32((state.best_bids[-50:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
         
         # Convert action to integer scalar (assuming action is a single-element array)
         #action = jax.lax.convert_element_type(action[0], jnp.int32)  # Ensure it's a scalar
@@ -1096,7 +1096,6 @@ class MarketMakingEnv(BaseLOBEnv):
         reward= -jnp.abs(state.inventory)
         
 
-
         # Define a penalty if he exceeds a certain inventory
         penalty_threshold = 100.0
         penalty_amount = 500.0 
@@ -1174,7 +1173,7 @@ class MarketMakingEnv(BaseLOBEnv):
             "remaining_ratio": jnp.where(state.max_steps_in_episode==0, 0., 1. - state.step_counter / state.max_steps_in_episode),
             "prev_action": state.prev_action,  # use quants only
             "prev_executed": state.prev_executed,  # use quants only
-          #  "prev_executed_ratio": jnp.where(state.prev_action[:, 1]==0., 0., state.prev_executed / state.prev_action[:, 1]),
+            "prev_executed_ratio": jnp.where(state.prev_action==0., 0., state.prev_executed /10)# state.prev_action[:, 1]), Hard code size of normal trade
             
         }
 
@@ -1209,7 +1208,7 @@ class MarketMakingEnv(BaseLOBEnv):
             "remaining_ratio": 0,
             "prev_action": 0,
             "prev_executed": 0,
-          # "prev_executed_ratio": 0,
+           "prev_executed_ratio": 0,
         
         }
         stds = {
@@ -1239,7 +1238,7 @@ class MarketMakingEnv(BaseLOBEnv):
             "remaining_ratio": 1,
             "prev_action": 10,
             "prev_executed": 10,
-          #  "prev_executed_ratio": 1,
+            "prev_executed_ratio": 1,
         }
         if normalize:
             obs = self.normalize_obs(obs, means, stds)
@@ -1350,7 +1349,7 @@ class MarketMakingEnv(BaseLOBEnv):
         """Observation space of the environment."""
         #space = spaces.Box(-10,10,(809,),dtype=jnp.float32) 
         # space = spaces.Box(-10, 10, (21,), dtype=jnp.float32) 
-        space = spaces.Box(-10, 10, (25,), dtype=jnp.float32) 
+        space = spaces.Box(-10, 10, (29,), dtype=jnp.float32) 
         return space
 
     def state_space(self, params: EnvParams) -> spaces.Dict:
@@ -1432,7 +1431,7 @@ if __name__ == "__main__":
         print("-"*20)
         key_policy, _ = jax.random.split(key_policy, 2)
         key_step, _ = jax.random.split(key_step, 2)
-        # test_action=env.action_space().sample(key_policy)
+        #test_action=env.action_space().sample(key_policy)
         test_action = env.action_space().sample(key_policy) 
         jax.debug.print("test_action :{}",test_action)
         #test_action=0
@@ -1490,5 +1489,6 @@ if __name__ == "__main__":
 
 
         start=time.time()
-        n_obs, n_state, reward, done, _ = vmap_step(vmap_keys, state, test_actions, env_params)
+        n_obs, n_state, reward, done, _ = vmap_step(vmap_keys,
+         state, test_actions, env_params)
         print("Time for vmap step with,",num_envs, " environments : \n",time.time()-start)

@@ -345,11 +345,11 @@ if __name__ == "__main__":
     timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 256,
+        "NUM_ENVS": 1,#256
         "NUM_STEPS": 128,
         "TOTAL_TIMESTEPS": 2e6,
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 16,
+        "NUM_MINIBATCHES": 1,#16
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,

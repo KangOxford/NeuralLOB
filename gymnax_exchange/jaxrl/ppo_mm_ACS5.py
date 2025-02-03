@@ -1,13 +1,12 @@
 import jax
-import sys
-import os
-sys.path.append(os.path.abspath('/home/duser/AlphaTrade')) 
-from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
 import jax.numpy as jnp
-import flax
 import flax.linen as nn
 import numpy as np
 import optax
+import os
+import sys
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))  # Absolute path to AlphaTrade
+sys.path.append('.')
 from flax.linen.initializers import constant, orthogonal
 from typing import Sequence, NamedTuple, Any, Dict
 from flax.training.train_state import TrainState
@@ -15,99 +14,58 @@ import distrax
 import gymnax
 from purejaxrl.purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper
 from gymnax.environments import spaces
-from purejaxrl.purejaxrl.experimental.s5.s5 import init_S5SSM, make_DPLR_HiPPO, StackedEncoderModel
+
+
+# from jax import config
+# config.update("jax_enable_x64",True)
 import dataclasses
-import distrax
+
+
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+import jax
+import jax.numpy as jnp
+import flax.linen as nn
+# import numpy as np
+import optax
+import time
+# from flax.linen.initializers import constant, orthogonal
+from typing import Optional, Sequence, NamedTuple, Any, Dict
+from flax.training.train_state import TrainState
 import gymnax
+import functools
+from gymnax.environments import spaces
+import sys
+import chex
 
 
-d_model = 256
-ssm_size = 256
-C_init = "lecun_normal"
-discretization="zoh"
-dt_min=0.001
-dt_max=0.1
-n_layers = 4
-conj_sym=True
-clip_eigs=False
-bidirectional=False
 
-blocks = 1
-block_size = int(ssm_size / blocks)
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade/purejaxrl'))
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))  # Absolute path to AlphaTrade
+sys.path.append('.')
 
-Lambda, _, B, V, B_orig = make_DPLR_HiPPO(ssm_size)
+#sys.path.append('../AlphaTrade/purejaxrl')
+#sys.path.append('../AlphaTrade')
+from purejaxrl.purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
+from purejaxrl.purejaxrl.experimental.s5.s5 import StackedEncoderModel#, init_S5SSM, make_DPLR_HiPPO
+from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
+#from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
+from gymnax_exchange.jaxrl.actorCritic import ActorCriticRNN, ScannedRNN
+from gymnax_exchange.jaxrl import actorCriticS5mm
+import os
+import flax
+from jax.lib import xla_bridge 
+print(xla_bridge.get_backend().platform)
+#Code snippet to disable all jitting.
+from jax import config
+config.update("jax_disable_jit", False) 
+# config.update("jax_disable_jit", True)
+config.update("jax_check_tracer_leaks", False) #finds a whole assortment of leaks if true... bizarre.
+import datetime
+import gymnax_exchange.utils.colorednoise as cnoise
+jax.numpy.set_printoptions(linewidth=250)
 
-block_size = block_size // 2
-ssm_size = ssm_size // 2
-
-Lambda = Lambda[:block_size]
-V = V[:, :block_size]
-
-Vinv = V.conj().T
 
 
-ssm_init_fn = init_S5SSM(H=d_model,
-                            P=ssm_size,
-                            Lambda_re_init=Lambda.real,
-                            Lambda_im_init=Lambda.imag,
-                            V=V,
-                            Vinv=Vinv,
-                            C_init=C_init,
-                            discretization=discretization,
-                            dt_min=dt_min,
-                            dt_max=dt_max,
-                            conj_sym=conj_sym,
-                            clip_eigs=clip_eigs,
-                            bidirectional=bidirectional)
-
-class ActorCriticS5(nn.Module):
-    action_dim: Sequence[int]
-    config: Dict
-
-    def setup(self):
-        self.encoder_0 = nn.Dense(128, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))
-        self.encoder_1 = nn.Dense(256, kernel_init=orthogonal(np.sqrt(2)), bias_init=constant(0.0))
-    
-        self.action_body_0 = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))
-        self.action_body_1 = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))
-        self.action_decoder = nn.Dense(self.action_dim, kernel_init=orthogonal(0.01), bias_init=constant(0.0))
-
-        self.value_body_0 = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))
-        self.value_body_1 = nn.Dense(128, kernel_init=orthogonal(2), bias_init=constant(0.0))
-        self.value_decoder = nn.Dense(1, kernel_init=orthogonal(1.0), bias_init=constant(0.0))
-
-        self.s5 = StackedEncoderModel(
-            ssm=ssm_init_fn,
-            d_model=d_model,
-            n_layers=n_layers,
-            activation="half_glu1",
-        )
-
-    def __call__(self, hidden, x):
-        obs, dones = x
-        embedding = self.encoder_0(obs)
-        embedding = nn.leaky_relu(embedding)
-        embedding = self.encoder_1(embedding)
-        embedding = nn.leaky_relu(embedding)
-
-        hidden, embedding = self.s5(hidden, embedding, dones)
-
-        actor_mean = self.action_body_0(embedding)
-        actor_mean = nn.leaky_relu(actor_mean)
-        actor_mean = self.action_body_1(actor_mean)
-        actor_mean = nn.leaky_relu(actor_mean)
-        actor_mean = self.action_decoder(actor_mean)
-        #jax.debug.print("actor_mean:{}",actor_mean)
-
-        pi = distrax.Categorical(logits=actor_mean)
-
-        critic = self.value_body_0(embedding)
-        critic = nn.leaky_relu(critic)
-        critic = self.value_body_1(critic)
-        critic = nn.leaky_relu(critic)
-        critic = self.value_decoder(critic)
-
-        return hidden, pi, jnp.squeeze(critic, axis=-1)
 
 class Transition(NamedTuple):
     done: jnp.ndarray
@@ -135,7 +93,7 @@ def make_train(config):
         episode_time=config["EPISODE_TIME"],
         #max_task_size=config["MAX_TASK_SIZE"],
         rewardLambda=config["REWARD_LAMBDA"],
-        ep_type=config["DATA_TYPE"],
+        ep_type=config["EP_TYPE"],
     )
     env_params = dataclasses.replace(
         env.default_params,
@@ -156,7 +114,7 @@ def make_train(config):
 
     def train(rng):
         # INIT NETWORK
-        network = ActorCriticS5(env.action_space(env_params).n, config=config)
+        network = actorCriticS5mm.ActorCriticS5(env.action_space(env_params).n, config=config)
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
@@ -164,7 +122,8 @@ def make_train(config):
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
         )
-        init_hstate = StackedEncoderModel.initialize_carry(config["NUM_ENVS"], ssm_size, n_layers)
+        init_hstate = actorCriticS5mm.ActorCriticS5.initialize_carry(
+                    config["NUM_ENVS"], actorCriticS5mm.ssm_size, actorCriticS5mm.n_layers)
         network_params = network.init(_rng, init_hstate, init_x)
         if config["ANNEAL_LR"]:
             tx = optax.chain(
@@ -186,7 +145,7 @@ def make_train(config):
         rng, _rng = jax.random.split(rng)
         reset_rng = jax.random.split(_rng, config["NUM_ENVS"])
         obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
-        init_hstate = StackedEncoderModel.initialize_carry(config["NUM_ENVS"], ssm_size, n_layers)
+        
 
         # TRAIN LOOP
         def _update_step(runner_state, unused):
@@ -199,8 +158,6 @@ def make_train(config):
                 ac_in = (last_obs[np.newaxis, :], last_done[np.newaxis, :])
                 hstate, pi, value = network.apply(train_state.params, hstate, ac_in)
                 action = pi.sample(seed=_rng)
-               # jax.debug.print("pi :{}",pi)
-                #jax.debug.print("actions:{}",action)
                 log_prob = pi.log_prob(action)
                 value, action, log_prob = (
                     value.squeeze(0),
@@ -382,49 +339,42 @@ def make_train(config):
 if __name__ == "__main__":
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 4,
+        "NUM_ENVS": 1,
         "NUM_STEPS": 128,
         "TOTAL_TIMESTEPS": 2e6,
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
+        "NUM_MINIBATCHES": 1,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
         "ENT_COEF": 0.01,
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
-        "ENV_NAME": "CartPole-v1",
+        "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
         "DEBUG": True,
-    }
-    config_mm = {
-         "LR": 2.5e-4,
-        "NUM_ENVS": 4,
-        "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e5,
-        "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
-        "GAMMA": 0.99,
-        "GAE_LAMBDA": 0.95,
-        "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.01,
-        "VF_COEF": 0.5,
-        "MAX_GRAD_NORM": 0.5,
-        "ENV_NAME": "jax-lobl-mm",
-        "ANNEAL_LR": True,
-        "DEBUG": True,
-        
+        "ENV_NAME": "alphatradeExec-v0",
         "WINDOW_INDEX": 200, # 2 fix random episode #-1,
+        "DEBUG": True,
+
+        "RNN_TYPE": "S5",  # "GRU", "S5"
+        "HIDDEN_SIZE": 64,  # 128
+        "ACTIVATION_FN": "relu", # "tanh", "relu", "leaky_relu", "sigmoid", "swish"
+        "ACTION_NOISE_COLOR": 2,
+        
         "TASKSIDE": "random", # "random", "buy", "sell"
         "REWARD_LAMBDA": 1., #0.001,
         "ACTION_TYPE": "pure", # "delta"
-        "MAX_TASK_SIZE": 100,
+        "OUT_SIZE": 2,#action space.
+        "CONT_ACTIONS":False,
+        "JOINT_ACTOR_CRITIC_NET":True,
         #"TASK_SIZE": 100, # 500,
         "EPISODE_TIME": 60 * 5, # time in seconds
-        "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
-        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
-    }
-
+        "EP_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
+        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay",
+    
+        "ACTOR_STD": "state_dependent",  # 'state_dependent', 'param', 'fixed'
+        "REDUCE_ACTION_SPACE_BY": 10,}
     rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config_mm))
+    train_jit = jax.jit(make_train(config))
     out = train_jit(rng)
