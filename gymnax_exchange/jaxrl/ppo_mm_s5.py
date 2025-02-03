@@ -386,22 +386,18 @@ def make_train(config):
 if __name__ == "__main__":
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 256,
+        "NUM_ENVS": 4,
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 6e7,
+        "TOTAL_TIMESTEPS": 5e5,
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 16,
+        "NUM_MINIBATCHES": 4,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
-        "ENT_COEF": 0.,
+        "ENT_COEF": 0.01,
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
-        "ACTIVATION": "tanh",
         "ANNEAL_LR": True,
-        "DEBUG": True,
-        "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": 200, # 2 fix random episode #-1,
         "DEBUG": True,
         
         "TASKSIDE": "random", # "random", "buy", "sell"
@@ -411,7 +407,9 @@ if __name__ == "__main__":
         #"TASK_SIZE": 100, # 500,
         "EPISODE_TIME": 60 * 5, # time in seconds
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps
-        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
+        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay",
+        "WINDOW_INDEX": 200
+          # 2 fix random episode #-1,
     }
     config2 = {
         "LR": 2.5e-4,
