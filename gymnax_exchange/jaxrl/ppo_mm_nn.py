@@ -27,7 +27,7 @@ import dataclasses
 
 from purejaxrl.purejaxrl.wrappers import LogWrapper, FlattenObservationWrapper
 
-wandbOn = False # False
+wandbOn = True # False
 if wandbOn:
     import wandb
 
@@ -157,6 +157,15 @@ def make_train(config):
                 #jax.debug.print("action:{}",action)
                 log_prob = pi.log_prob(action)
                 #jax.debug.print("log_prob:{}",log_prob)
+                # Track actions over time
+            
+                def log_action_distribution(action):
+                    unique_actions, counts = jnp.unique(action, return_counts=True)
+                    action_distribution = {f"action_{int(a)}": int(c) for a, c in zip(unique_actions, counts)}
+                    wandb.log(action_distribution)
+                if wandbOn:
+                 jax.debug.callback(log_action_distribution, action)
+
 
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
@@ -300,7 +309,6 @@ def make_train(config):
             # Debugging mode
             if config.get("DEBUG"):
                 def callback(info):
-
                     return_values = info["returned_episode_returns"][info["returned_episode"]]
                     timesteps = info["timestep"][info["returned_episode"]] * config["NUM_ENVS"]
                     PnL = info["total_PnL"]
@@ -345,11 +353,11 @@ if __name__ == "__main__":
     timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 256,
+        "NUM_ENVS": 256,#256
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 6e7,
+        "TOTAL_TIMESTEPS": 4e6, #4e6 converges.
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 16,
+        "NUM_MINIBATCHES": 16,#16
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
@@ -360,7 +368,7 @@ if __name__ == "__main__":
         "ANNEAL_LR": True,
         "DEBUG": True,
         "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": 200, # 2 fix random episode #-1,
+        "WINDOW_INDEX": -1, # 2 fix random episode #-1,
         "DEBUG": True,
         
         "TASKSIDE": "random", # "random", "buy", "sell"
@@ -368,7 +376,7 @@ if __name__ == "__main__":
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         #"TASK_SIZE": 100, # 500,
-        "EPISODE_TIME": 60 * 5, # time in seconds
+        "EPISODE_TIME": 60 *30, # time in seconds
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
     }
@@ -385,6 +393,52 @@ if __name__ == "__main__":
 
     print(f"Results will be saved to {params_file_name}")
 
-    rng = jax.random.PRNGKey(30)
+    # +++++ Single GPU +++++
+    rng = jax.random.PRNGKey(0)
+    # rng = jax.random.PRNGKey(30)
     train_jit = jax.jit(make_train(config))
+ 
     out = train_jit(rng)
+  
+    # +++++ Single GPU +++++
+
+    # # +++++ Multiple GPUs +++++
+    # num_devices = 4F
+    # rng = jax.random.PRNGKey(30)
+    # rngs = jax.random.split(rng, num_devices)
+    # train_fn = lambda rng: make_train(ppo_config)(rng)
+    # start=time.time()
+    # out = jax.pmap(train_fn)(rngs)
+    # print("Time: ", time.time()-start)
+    # # +++++ Multiple GPUs +++++
+    
+    
+
+    # '''
+    # # ---------- Save Output ----------
+    import flax
+
+    train_state = out['runner_state'][0] # runner_state.train_state
+    params = train_state.params
+    
+
+
+    import datetime;params_file_name = f'params_file_{wandb.run.name}_{datetime.datetime.now().strftime("%m-%d_%H-%M")}'
+
+    # Save the params to a file using flax.serialization.to_bytes
+    with open(params_file_name, 'wb') as f:
+        f.write(flax.serialization.to_bytes(params))
+        print(f"params saved")
+
+    # Load the params from the file using flax.serialization.from_bytes
+    with open(params_file_name, 'rb') as f:
+        restored_params = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        print(f"params restored")
+        
+    # jax.debug.breakpoint()
+    # assert jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), params, restored_params))
+    # print(">>>")
+    # '''
+
+    if wandbOn:
+        run.finish()
