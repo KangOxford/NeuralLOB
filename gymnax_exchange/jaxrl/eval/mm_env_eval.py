@@ -192,6 +192,7 @@ for episode in range(episodes):
     # ============================
     # Run the test loop
     # ============================
+    action_history = []
     
     for step in range(100000):
         rng, _rng = jax.random.split(rng)
