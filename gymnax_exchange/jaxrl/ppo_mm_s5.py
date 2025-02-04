@@ -118,6 +118,10 @@ class Transition(NamedTuple):
     obs: jnp.ndarray
     info: jnp.ndarray
 
+wandbOn = True # False
+if wandbOn:
+    import wandb
+
 
 def make_train(config):
     config["NUM_UPDATES"] = (

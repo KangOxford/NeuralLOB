@@ -69,7 +69,7 @@ import wandb  # Import Weights & Biases for logging
 wandb.init(project="AlphaTrade_Eval", config={"run_type": "evaluation"})
 
 # Load the trained model parameters
-params_filename = "/home/duser/AlphaTrade/params_file_balmy-terrain-229_02-03_12-09"
+params_filename = "/home/duser/AlphaTrade/params_file_laced-snow-236_02-04_12-49"
 with open(params_filename, 'rb') as f:
     params = serialization.from_bytes(frozen_dict.FrozenDict, f.read())
 
@@ -91,7 +91,7 @@ config = {
         "ANNEAL_LR": True,
         "DEBUG": True,
         "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": 200, # 2 fix random episode #-1,
+        "WINDOW_INDEX": 1, # 2 fix random episode #-1,
         "DEBUG": True,
         
         "TASKSIDE": "random", # "random", "buy", "sell"
@@ -99,7 +99,7 @@ config = {
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         #"TASK_SIZE": 100, # 500,
-        "EPISODE_TIME": 60 * 5, # time in seconds
+        "EPISODE_TIME": 60 * 60*3, # time in seconds
         "EP_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
     }
@@ -182,65 +182,26 @@ total_rewards = []
 total_revenues = []
 total_executed = []
 
-episodes = 1  # Run for multiple episodes
+episodes = 3 # Run for multiple episodes
 for episode in range(episodes):
     obsv, env_state = jax.vmap(env.reset, in_axes=(0, None))(reset_rng, env_params)
     done = jnp.array([False])
     episode_reward = 0
     episode_revenue = 0
     episode_executed = 0
-
-    # ============================
-    # Initialize data storage
-    # ============================
-    reward_file = 'gymnax_exchange/test_scripts/test_outputs/data_trained.csv'  # Relative path
-    
-    # Ensure the directory exists, if not, create it
-    os.makedirs(os.path.dirname(reward_file), exist_ok=True)
-    test_steps = 1500
-    #ask_raw_orders_history = np.zeros((test_steps, 100, 6), dtype=int)
-    #bid_raw_orders_history = np.zeros((test_steps, 100,6), dtype=int)
-    rewards = np.zeros((test_steps, 1), dtype=int)
-    inventory = np.zeros((test_steps, 1), dtype=int)
-    total_PnL = np.zeros((test_steps, 1), dtype=int)
-    buyQuant = np.zeros((test_steps, 1), dtype=int)
-    sellQuant = np.zeros((test_steps, 1), dtype=int)
-    bid_price = np.zeros((test_steps, 1), dtype=int)
-    
-    ask_price = np.zeros((test_steps, 1), dtype=int)
-    
- 
-    state_best_ask = np.zeros((test_steps, 1), dtype=int)
-    state_best_bid = np.zeros((test_steps, 1), dtype=int)
-    averageMidprice = np.zeros((test_steps, 1), dtype=int)
-    average_best_bid =np.zeros((test_steps, 1), dtype=int)
-    average_best_ask =np.zeros((test_steps, 1), dtype=int)
-  
-
-
-    output_dir = 'gymnax_exchange/test_scripts/test_outputs/'
-   
-
-    
-   # book_vol_av_bid= np.zeros((test_steps, 1), dtype=int)
-   # book_vol_av_ask = np.zeros((test_steps, 1), dtype=int)
-
-    # ============================
-    # Track the number of valid steps
-    # ============================
-    valid_steps = 0
-
     # ============================
     # Run the test loop
     # ============================
     
-    for step in range(test_steps):  # Maximum 100 steps per episode       
+    for step in range(100000):
         rng, _rng = jax.random.split(rng)
         pi, value = network.apply(params, obsv)
         action = pi.sample(seed=_rng)
-        #jax.debug.print("action:{}",action)
+        action_history.append(int(action))  # Convert JAX tensor to Python int
+
         log_prob = pi.log_prob(action)
         entropy = pi.entropy().mean()
+        
         
         # Take a step in the environment
         rng_step = jax.random.split(_rng, config["NUM_ENVS"])
@@ -248,21 +209,12 @@ for episode in range(episodes):
         
         episode_reward += reward.sum()
        
-
-        inventory[step] = info["inventory"]
-        total_PnL[step] = info["total_PnL"]
-        buyQuant[step] = info["buyQuant"]
-        sellQuant[step] = info["sellQuant"]
-        #agr_bid_price[i] = info["action_prices"][0]  
-        bid_price[step] = info["action_prices"][:,0]  # Store best ask
-        #bid_price_PP[i] = info["action_prices"][2]
-        #agr_ask_price[i] = info["action_prices"][3]  
-        ask_price[step] = info["action_prices"][:,1] 
-        #ask_price_PP[i] = info["action_prices"][5]# Store best bid
-        averageMidprice[step] = info["averageMidprice"]  # Store mid price
-        average_best_bid[step]=info["average_best_bid"]
-        average_best_ask[step]=info["average_best_ask"]
-        valid_steps += 1
+        # Logging every N steps (to avoid spamming WandB)
+        if step % 100 == 0:
+            unique_actions, counts = np.unique(action_history, return_counts=True)
+            action_distribution = {f"action_{int(a)}": int(c) for a, c in zip(unique_actions, counts)}
+            wandb.log(action_distribution)
+     
         # Log results
         wandb.log({
             "Step":step,
@@ -278,94 +230,4 @@ for episode in range(episodes):
         if done.all():
             break
     
-    total_rewards.append(episode_reward)
-    total_revenues.append(episode_revenue)
-    total_executed.append(episode_executed)
     
-    
-    print(f"Episode {episode}: Reward {episode_reward}, Revenue {episode_revenue}, Executed {episode_executed}")
-
-# Final summary
-print(f"Average Reward: {sum(total_rewards) / episodes}")
-print(f"Average Revenue: {sum(total_revenues) / episodes}")
-print(f"Average Quantity Executed: {sum(total_executed) / episodes}")
-wandb.finish()
-
-plot_until_step = valid_steps 
-rewards = rewards[:plot_until_step]
-inventory = inventory[:plot_until_step]
-total_PnL = total_PnL[:plot_until_step] 
-buyQuant = buyQuant[:plot_until_step]
-sellQuant = sellQuant[:plot_until_step]
-bid_price = bid_price[:plot_until_step]
-
-ask_price = ask_price[:plot_until_step]
-averageMidprice = averageMidprice[:plot_until_step]
-average_best_bid =average_best_bid[:plot_until_step]
-average_best_ask =average_best_ask[:plot_until_step]
- 
-
-
-    # ============================
-    # Save all data to CSV
-    # ============================
-    # Combine all data into a single 2D array (each column is one metric)
-data = np.hstack([rewards, inventory, total_PnL, buyQuant, sellQuant, bid_price, ask_price, averageMidprice])
-    
-    # Add column headers
-column_names = ['Reward', 'Inventory', 'Total PnL', 'Buy Quantity', 'Sell Quantity', 'Bid Price', 'Ask Price', 'averageMidprice']
-    
-# Save data using pandas to handle CSV easily
-df = pd.DataFrame(data, columns=column_names)
-df.to_csv(reward_file, index=False)
-    
-print(f"Data saved to {reward_file}")
-
-print(f"Last valid step {valid_steps}")
-print(f"Last PnL: {total_PnL[-1]}")
-    
-    # ============================
-    # Plotting all metrics on one page
-    # ============================
-    # Create a figure with subplots (3 rows and 3 columns to fit the new data)
-fig, axes = plt.subplots(3, 3, figsize=(15, 15))  # Adjust the grid as needed
-
-    
-
-# Plot each metric on a separate subplot
-axes[0, 0].plot(range(plot_until_step), rewards, label="Reward", color='blue')
-axes[0, 0].set_xlabel("Steps")
-axes[0, 0].set_ylabel("Reward")
-axes[0, 0].set_title("Rewards Over Steps")
-    
-axes[0, 1].plot(range(plot_until_step), inventory, label="Inventory", color='green')
-axes[0, 1].set_xlabel("Steps")
-axes[0, 1].set_ylabel("Inventory")
-axes[0, 1].set_title("Inventory Over Steps")
-    
-axes[0, 2].plot(range(plot_until_step), total_PnL, label="Total PnL", color='orange')
-axes[0, 2].set_xlabel("Steps")
-axes[0, 2].set_ylabel("Total PnL")
-axes[0, 2].set_title("Total PnL Over Steps")
-    
-axes[1, 0].plot(range(plot_until_step), buyQuant, label="Buy Quantity", color='red')
-axes[1, 0].set_xlabel("Steps")
-axes[1, 0].set_ylabel("Buy Quantity")
-axes[1, 0].set_title("Buy Quantity Over Steps")
-    
-axes[1, 1].plot(range(plot_until_step), sellQuant, label="Sell Quantity", color='purple')
-axes[1, 1].set_xlabel("Steps")
-axes[1, 1].set_ylabel("Sell Quantity")
-axes[1, 1].set_title("Sell Quantity Over Steps")
-    
-# Combined plot for Bid Price, Ask Price, and Average Mid Price
-axes[1, 2].plot(range(plot_until_step), bid_price, label="Bid Price", color='pink')
-axes[1, 2].plot(range(plot_until_step), ask_price, label="Ask Price", color='cyan')
-axes[1, 2].plot(range(plot_until_step), averageMidprice, label="Average Mid Price", color='magenta')
-
-combined_plot_file = 'gymnax_exchange/test_scripts/test_outputs/trained.png'
-plt.savefig(combined_plot_file)
-plt.close()
-    
-
-
