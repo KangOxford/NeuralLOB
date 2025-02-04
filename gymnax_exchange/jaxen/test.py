@@ -17,4 +17,3 @@ import jax.numpy as jnp
 # Test JAX with GPU
 x = jnp.ones((2, 3))
 print(jax.devices())  # Should list the available devices
-

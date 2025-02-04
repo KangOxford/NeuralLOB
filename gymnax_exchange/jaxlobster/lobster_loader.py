@@ -485,16 +485,29 @@ class LoadLOBSTER_resample():
                 index_s=np.array(indices)
                 index_e=np.array(indices)+np.ones_like(index_s)*self.n_messages*self.window_length
                 max_msgs=self.n_messages*self.window_length
+
         elif self.window_type == "fixed_time":
             for i in range(len(indices) - 1):
-                (i_s,
-                 i_e)= message_day[
-                            (message_day['time'] >= indices[i]) &
-                            (message_day['time'] <
-                                 indices[i]+self.window_length)
-                            ].index[[0,-1]]
-                index_s.append(i_s)
-                index_e.append(i_e)
+                window_start = indices[i]
+                window_end = indices[i] + self.window_length
+                # Filter the messages for the current window
+                filtered = message_day[
+                    (message_day['time'] >= window_start) &
+                    (message_day['time'] < window_end)
+                ]
+                # Debug: print out information about the candidate window
+                #print(f"Window {i}: start time {window_start}, end time {window_end}, "
+                #    f"found {len(filtered)} rows in the message data.")
+                if not filtered.empty:
+                    # Get the first and last row indices of this window
+                    (i_s, i_e) = filtered.index[[0, -1]]
+                    #print(f"  Window {i} indices: first index = {i_s}, last index = {i_e}")
+                    index_s.append(i_s)
+                    index_e.append(i_e)
+                else:
+                    # If no data is found, print a warning (seems to happen quite often for smaller window sizes)
+                    print(f"  Warning: Window {i} has no data!")
+
         init_OBs=jnp.array(orderbook_day.iloc[jnp.array(index_s),:])
         index_s=jnp.array(index_s)+jnp.ones_like(jnp.array(index_s))*self.index_offest
         index_e=jnp.array(index_e)+jnp.ones_like(jnp.array(index_e))*self.index_offest

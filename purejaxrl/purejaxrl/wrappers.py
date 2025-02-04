@@ -8,7 +8,7 @@ from typing import Optional, Tuple, Union, Any
 from gymnax.environments import environment, spaces
 from brax import envs
 from brax.envs.wrappers.training import EpisodeWrapper, AutoResetWrapper
-import navix as nx
+#import navix as nx
 
 
 class GymnaxWrapper(object):
