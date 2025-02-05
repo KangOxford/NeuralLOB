@@ -1173,7 +1173,7 @@ class MarketMakingEnv(BaseLOBEnv):
   
         #reward = approx_realized_pnl + unrealizedPnL_lambda * approx_unrealized_pnl +  inventoryPnL_lambda * jnp.minimum(InventoryPnL,InventoryPnL*asymmetrically_dampened_lambda) #Last term adds negative inventory PnL without dampening
        
-        reward= -jnp.abs(state.inventory)
+        reward= -jnp.abs(new_inventory)
         
 
         # Define a penalty if he exceeds a certain inventory
@@ -1455,7 +1455,7 @@ if __name__ == "__main__":
     except:
         # ATFolder = "./testing_oneDay"
         #ATFolder = "/training_oneDay"
-        ATFolder = "/home/duser/AlphaTrade/training_oneDay"
+        ATFolder = "/home/duser/AlphaTrade/testing"
 
         # ATFolder = '/home/duser/AlphaTrade'
         # ATFolder = '/homes/80/kang/AlphaTrade'
@@ -1466,7 +1466,7 @@ if __name__ == "__main__":
         "ATFOLDER": ATFolder,
         "TASKSIDE": "buy",
         "MAX_TASK_SIZE": 100,
-        "WINDOW_INDEX": 300,
+        "WINDOW_INDEX": 2,
         "ACTION_TYPE": "pure",
         "REWARD_LAMBDA": 0.1,
         "EP_TYPE": "fixed_time",

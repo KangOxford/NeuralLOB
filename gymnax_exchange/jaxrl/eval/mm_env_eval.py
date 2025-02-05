@@ -69,7 +69,7 @@ import wandb  # Import Weights & Biases for logging
 wandb.init(project="AlphaTrade_Eval", config={"run_type": "evaluation"})
 
 # Load the trained model parameters
-params_filename = "/home/duser/AlphaTrade/params_file_laced-snow-236_02-04_12-49"
+params_filename = "/home/duser/AlphaTrade/params_file_eager-sea-243_02-04_19-42"
 with open(params_filename, 'rb') as f:
     params = serialization.from_bytes(frozen_dict.FrozenDict, f.read())
 
@@ -91,7 +91,7 @@ config = {
         "ANNEAL_LR": True,
         "DEBUG": True,
         "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": 1, # 2 fix random episode #-1,
+        "WINDOW_INDEX": 200, # 2 fix random episode #-1,
         "DEBUG": True,
         
         "TASKSIDE": "random", # "random", "buy", "sell"
@@ -217,15 +217,16 @@ for episode in range(episodes):
             wandb.log(action_distribution)
      
         # Log results
-        wandb.log({
+        wandb.log(
+            data={
             "Step":step,
             "Episode": episode,
             "reward":reward,
             "total_PnL":info["total_PnL"],
             "buyQuant":info["buyQuant"],
             "sellQuant":info["sellQuant"],
-        
-        })
+            },commit=True
+            )
     
         
         if done.all():

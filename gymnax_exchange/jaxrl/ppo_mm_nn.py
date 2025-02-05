@@ -328,12 +328,11 @@ def make_train(config):
                                 "buyQuant":jnp.mean(buyQuant) if buyQuant.size > 0 else 0,
                                 "sellQuant":jnp.mean(sellQuant) if sellQuant.size > 0 else 0,
                                 "other_exec_quants":jnp.mean(other_exec_quants) if other_exec_quants.size > 0 else 0,
-                                
                             },
                             commit=True
                         )
-                    for t in range(len(timesteps)):
-                        print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
+                    #for t in range(len(timesteps)):
+                        #print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
                 jax.debug.callback(callback, metric)
 
             runner_state = (train_state, env_state, last_obs, rng)
@@ -355,7 +354,7 @@ if __name__ == "__main__":
         "LR": 2.5e-4,
         "NUM_ENVS": 256,#256
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 4e6, #4e6 converges.
+        "TOTAL_TIMESTEPS": 5e6, #4e6 converges.
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16,#16
         "GAMMA": 0.99,
@@ -365,18 +364,16 @@ if __name__ == "__main__":
         "VF_COEF": 0.5,
         "MAX_GRAD_NORM": 0.5,
         "ACTIVATION": "tanh",
-        "ANNEAL_LR": True,
+        "ANNEAL_LR": False,
         "DEBUG": True,
         "ENV_NAME": "alphatradeExec-v0",
-        "WINDOW_INDEX": -1, # 2 fix random episode #-1,
-        "DEBUG": True,
-        
+        "WINDOW_INDEX": -1, # 2 fix random episode #-1,        
         "TASKSIDE": "random", # "random", "buy", "sell"
         "REWARD_LAMBDA": 1., #0.001,
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         #"TASK_SIZE": 100, # 500,
-        "EPISODE_TIME": 60 *30, # time in seconds
+        "EPISODE_TIME": 60 *60, # time in seconds
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
     }
@@ -385,7 +382,7 @@ if __name__ == "__main__":
         run = wandb.init(
             project="AlphaTradeJAX_Train",
             config=config,
-            save_code=False,  # optional
+            save_code=True,  # 
         )
         import datetime;params_file_name = f'params_file_{wandb.run.name}_{timestamp}'
     else:
