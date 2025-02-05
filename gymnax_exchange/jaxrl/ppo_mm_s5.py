@@ -211,6 +211,12 @@ def make_train(config):
                     action.squeeze(0),
                     log_prob.squeeze(0),
                 )
+                def log_action_distribution(action):
+                    unique_actions, counts = jnp.unique(action, return_counts=True)
+                    action_distribution = {f"action_{int(a)}": int(c) for a, c in zip(unique_actions, counts)}
+                    wandb.log(action_distribution)
+                if wandbOn:
+                 jax.debug.callback(log_action_distribution, action)
 
                 # STEP ENV
                 rng, _rng = jax.random.split(rng)
@@ -359,8 +365,28 @@ def make_train(config):
                 def callback(info):
                     return_values = info["returned_episode_returns"][info["returned_episode"]]
                     timesteps = info["timestep"][info["returned_episode"]] * config["NUM_ENVS"]
-                    for t in range(len(timesteps)):
-                        print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
+                    PnL = info["total_PnL"]
+                    inventories = info["inventory"] 
+                    buyQuant=info["buyQuant"]
+                    sellQuant=info["sellQuant"]
+                    reward=info["reward"]
+                    other_exec_quants=info["other_exec_quants"]
+                    if wandbOn:
+                        wandb.log(
+                            data={
+                                "global_step": jnp.max(timesteps) if timesteps.size > 0 else 0, # timesteps[t],
+                                "reward":jnp.mean(reward) if reward.size > 0 else 0,
+                                "episodic_return": jnp.mean(return_values) if return_values.size > 0 else 0,  # Handle empty arrays
+                                "PnL": jnp.mean(PnL) if PnL.size > 0 else 0,  # Handle empty arrays
+                                "inventory": jnp.mean(inventories) if inventories.size > 0 else 0, 
+                                "buyQuant":jnp.mean(buyQuant) if buyQuant.size > 0 else 0,
+                                "sellQuant":jnp.mean(sellQuant) if sellQuant.size > 0 else 0,
+                                "other_exec_quants":jnp.mean(other_exec_quants) if other_exec_quants.size > 0 else 0,
+                            },
+                            commit=True
+                        )
+                    #for t in range(len(timesteps)):
+                        #print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
                 jax.debug.callback(callback, metric)
 
             runner_state = (train_state, env_state, last_obs, last_done, hstate, rng)
@@ -384,6 +410,7 @@ def make_train(config):
 
 
 if __name__ == "__main__":
+    timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
         "NUM_ENVS": 4,
@@ -430,7 +457,65 @@ if __name__ == "__main__":
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
     }
+    if wandbOn:
+        run = wandb.init(
+            project="AlphaTradeJAX_Train",
+            config=config,
+            save_code=True,  # 
+        )
+        import datetime;params_file_name = f'params_file_{wandb.run.name}_{timestamp}'
+    else:
+        import datetime;params_file_name = f'params_file_{timestamp}'
 
-    rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config_mm))
+    print(f"Results will be saved to {params_file_name}")
+
+    # +++++ Single GPU +++++
+    rng = jax.random.PRNGKey(0)
+    # rng = jax.random.PRNGKey(30)
+    train_jit = jax.jit(make_train(config))
+ 
     out = train_jit(rng)
+  
+    # +++++ Single GPU +++++
+
+    # # +++++ Multiple GPUs +++++
+    # num_devices = 4F
+    # rng = jax.random.PRNGKey(30)
+    # rngs = jax.random.split(rng, num_devices)
+    # train_fn = lambda rng: make_train(ppo_config)(rng)
+    # start=time.time()
+    # out = jax.pmap(train_fn)(rngs)
+    # print("Time: ", time.time()-start)
+    # # +++++ Multiple GPUs +++++
+    
+    
+
+    # '''
+    # # ---------- Save Output ----------
+    import flax
+
+    train_state = out['runner_state'][0] # runner_state.train_state
+    params = train_state.params
+    
+
+
+    import datetime;params_file_name = f'params_file_{wandb.run.name}_{datetime.datetime.now().strftime("%m-%d_%H-%M")}'
+
+    # Save the params to a file using flax.serialization.to_bytes
+    with open(params_file_name, 'wb') as f:
+        f.write(flax.serialization.to_bytes(params))
+        print(f"params saved")
+
+    # Load the params from the file using flax.serialization.from_bytes
+    with open(params_file_name, 'rb') as f:
+        restored_params = flax.serialization.from_bytes(flax.core.frozen_dict.FrozenDict, f.read())
+        print(f"params restored")
+        
+    # jax.debug.breakpoint()
+    # assert jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), params, restored_params))
+    # print(">>>")
+    # '''
+
+    if wandbOn:
+        run.finish()
+

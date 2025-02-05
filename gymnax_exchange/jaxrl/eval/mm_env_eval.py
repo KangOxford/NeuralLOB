@@ -99,9 +99,9 @@ config = {
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         #"TASK_SIZE": 100, # 500,
-        "EPISODE_TIME": 60 * 60*3, # time in seconds
+        "EPISODE_TIME": 60 * 60, # time in secondss
         "EP_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
-        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
+        "ATFOLDER": "/home/duser/AlphaTrade/testing"
     }
 
 # Initialize the environment
@@ -225,6 +225,7 @@ for episode in range(episodes):
             "total_PnL":info["total_PnL"],
             "buyQuant":info["buyQuant"],
             "sellQuant":info["sellQuant"],
+            "inventory":info["inventory"]
             },commit=True
             )
     
