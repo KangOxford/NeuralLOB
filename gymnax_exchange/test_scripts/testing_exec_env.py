@@ -6,7 +6,7 @@ sys.path.append('/Users/sasrey/AlphaTrade')
 sys.path.append('/homes/80/kang/AlphaTrade')
 sys.path.append('../purejaxrl')
 
-from gymnax_exchange.jaxen.exec_env_old import ExecutionEnv
+from AlphaTrade.gymnax_exchange.jaxen.old.exec_env_old import ExecutionEnv
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 import chex
 import time

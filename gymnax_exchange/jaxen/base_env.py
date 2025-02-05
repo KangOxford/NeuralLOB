@@ -69,6 +69,7 @@ from flax import struct
 import itertools
 from gymnax_exchange.jaxob import JaxOrderBookArrays as job
 from gymnax_exchange.jaxlobster.lobster_loader import LoadLOBSTER_resample
+#from gymnax_exchange.jaxlobster.gen_loader import GenLoader
 from gymnax_exchange.utils.utils import *
 import pickle
 from jax.experimental import checkify
@@ -169,10 +170,10 @@ class BaseLOBEnv(environment.Environment):
         self.nOrdersPerSide=100
         self.nTradesLogged=100
         self.book_depth=10
-        self.n_actions=2
+        self.n_actions=8
         self.n_ticks_in_book = 2 # Depth of PP actions
         self.customIDCounter=0
-        self.trader_unique_id=job.INITID+1
+        self.trader_unique_id=10
         self.tick_size=100
         self.start_resolution=60 #Interval in seconds at which eps start
         loader=LoadLOBSTER_resample(alphatradePath,
@@ -206,10 +207,11 @@ class BaseLOBEnv(environment.Environment):
         self, key: chex.PRNGKey, state: EnvState, action: Dict, params: EnvParams
     ) -> Tuple[chex.Array, EnvState, float, bool, dict]:
         #Obtain the messages for the step from the message data
-        data_messages=self._get_data_messages(params.message_data,
-                                              state.start_index,
-                                              state.step_counter,
-                                              state.init_time[0]+params.episode_time)
+        #data_messages=#self._get_data_messages(params.message_data,
+                       #                       state.start_index,
+                        #                      state.step_counter,
+                         #                     state.init_time[0]+params.episode_time)
+        data_messages=self._get_generative_messages(params.message_data,n_messages)
         
         #Note: Action of the base environment should consistently be "DO NOTHING"
 
@@ -251,6 +253,7 @@ class BaseLOBEnv(environment.Environment):
         #Get initial orders (2xNdepth)x6 based on the initial L2 orderbook for this window 
         def get_initial_orders(book_data,time):
             orderbookLevels=10
+            #initid=25
             initid=job.INITID
             data=jnp.array(book_data).reshape(int(10*2),2)
             newarr = jnp.zeros((int(orderbookLevels*2),8),dtype=jnp.int32)
@@ -266,12 +269,14 @@ class BaseLOBEnv(environment.Environment):
                 .at[:,7].set(time[1])
             return initOB
         init_orders=get_initial_orders(book_data,time)
+        #jax.debug.print("init_orders {}",init_orders)
         #Initialise both sides of the book as being empty
         asks_raw=job.init_orderside(self.nOrdersPerSide)
         bids_raw=job.init_orderside(self.nOrdersPerSide)
-        trades_init=(jnp.ones((self.nTradesLogged,6))*-1).astype(jnp.int32)
+        trades_init=(jnp.ones((self.nTradesLogged,8))*-1).astype(jnp.int32)
         #Process the initial messages through the orderbook
         ordersides=job.scan_through_entire_array(init_orders,(asks_raw,bids_raw,trades_init))
+        #jax.debug.print("trades init {}",ordersides[2])
         return EnvState(ask_raw_orders=ordersides[0],
                         bid_raw_orders=ordersides[1],
                         trades=ordersides[2],
@@ -308,7 +313,7 @@ class BaseLOBEnv(environment.Environment):
                                                     i,
                                                     starts[i]) 
                         for i in range(self.n_windows)]
-            #jax.debug.print("{}",states)
+            
             self.init_states_array=tree_stack(states)
             print("SAVING STATES TO PKL...")
             with open(pkl_file_name, 'wb') as f:
@@ -347,6 +352,24 @@ class BaseLOBEnv(environment.Environment):
 
         messages=jnp.concatenate((m_wout_time,messages[:,-2:]),axis=1,dtype=jnp.int32)
         return messages
+    def _get_generative_messages(self,previous_messages,n_messages):
+        """Draft Generative Loader:
+        Inputs:
+        
+        Outputs:
+        
+        
+        """
+        loader = GenLoader(
+        model=GenLoader.dummy_model,
+        initial_context=previous_messages,
+        initial_ob_state=jnp.zeros((2, 10)),
+        n_messages=100
+        )
+        messages, _ = loader.generate_step()
+        
+
+        return messages
     
     @property
     def name(self) -> str:
@@ -383,7 +406,7 @@ class BaseLOBEnv(environment.Environment):
             {
                 "bids": spaces.Box(-1,999999999,shape=(6,self.nOrdersPerSide),dtype=jnp.int32),
                 "asks": spaces.Box(-1,999999999,shape=(6,self.nOrdersPerSide),dtype=jnp.int32),
-                "trades": spaces.Box(-1,999999999,shape=(6,self.nTradesLogged),dtype=jnp.int32),
+                "trades": spaces.Box(-1,999999999,shape=(8,self.nTradesLogged),dtype=jnp.int32),
                 "time": spaces.Discrete(params.max_steps_in_episode),
             }
         )

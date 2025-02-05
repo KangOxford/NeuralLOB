@@ -18,11 +18,19 @@ import functools
 from gymnax.environments import spaces
 import sys
 import chex
-sys.path.append('../purejaxrl')
-sys.path.append('../AlphaTrade')
-from purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
-from purejaxrl.experimental.s5.s5 import StackedEncoderModel#, init_S5SSM, make_DPLR_HiPPO
+
+
+
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade/purejaxrl'))
+sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))  # Absolute path to AlphaTrade
+sys.path.append('.')
+
+#sys.path.append('../AlphaTrade/purejaxrl')
+#sys.path.append('../AlphaTrade')
+from purejaxrl.purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper,ClipAction, VecEnv,NormalizeVecObservation,NormalizeVecReward
+from purejaxrl.purejaxrl.experimental.s5.s5 import StackedEncoderModel#, init_S5SSM, make_DPLR_HiPPO
 from gymnax_exchange.jaxen.exec_env import ExecutionEnv
+#from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
 from gymnax_exchange.jaxrl.actorCritic import ActorCriticRNN, ScannedRNN
 from gymnax_exchange.jaxrl import actorCriticS5
 import os
@@ -195,6 +203,7 @@ def make_train(config):
             def _env_step(runner_state, action_noise):
                 train_state, env_state, last_obs, last_done, hstate, rng = runner_state
                 rng, _rng = jax.random.split(rng)
+                
 
                 # SELECT ACTION
                 ac_in = (last_obs[jnp.newaxis, :], last_done[jnp.newaxis, :])
@@ -212,7 +221,7 @@ def make_train(config):
                 log_prob = pi.log_prob(action // config["REDUCE_ACTION_SPACE_BY"])
 
                 # print('action {}, log_prob {}', action.shape, log_prob.shape)
-                # jax.debug.print('action {}, log_prob {}', action, log_prob)
+                #jax.debug.print('action {}, log_prob {}', action, log_prob)
 
                 value, action, log_prob = (
                     value.squeeze(0),
@@ -263,7 +272,7 @@ def make_train(config):
                         transition.value,
                         transition.reward,
                     )
-                    # jax.debug.print('value {} reward {}', value, reward)
+                    #jax.debug.print('value {} reward {}', value, reward)
                     delta = reward + config["GAMMA"] * next_value * (1 - done) - value
                     gae = (
                         delta
@@ -367,6 +376,7 @@ def make_train(config):
                         )
                         log_prob = pi.log_prob(traj_batch.action // config["REDUCE_ACTION_SPACE_BY"])
                         activations = network_state["intermediates"]
+                        #jax.debug.print("activations:{}",activations)
                         dead_ratio = _dead_neuron_ratio(activations)
                         # norm of trajectory batch observation
                         obs_norm = jnp.sqrt((traj_batch.obs**2).sum(axis=-1)).mean()
@@ -781,7 +791,7 @@ if __name__ == "__main__":
         "ACTOR_STD": "state_dependent",  # 'state_dependent', 'param', 'fixed'
         "REDUCE_ACTION_SPACE_BY": 10,
       
-        "ATFOLDER": "./training_oneDay/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
+        "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay", #"/homes/80/kang/AlphaTrade/training_oneDay/",
         # "ATFOLDER": "./training_oneMonth/", #"/homes/80/kang/AlphaTrade/training_oneDay/",
         "RESULTS_FILE": "training_runs/results_file_"+f"{timestamp}",  # "/homes/80/kang/AlphaTrade/results_file_"+f"{timestamp}",
         "CHECKPOINT_DIR": "training_runs/checkpoints_"+f"{timestamp}",  # "/homes/80/kang/AlphaTrade/checkpoints_"+f"{timestamp}",
@@ -827,7 +837,7 @@ if __name__ == "__main__":
     # +++++ Single GPU +++++
 
     # # +++++ Multiple GPUs +++++
-    # num_devices = 4
+    # num_devices = 4F
     # rng = jax.random.PRNGKey(30)
     # rngs = jax.random.split(rng, num_devices)
     # train_fn = lambda rng: make_train(ppo_config)(rng)

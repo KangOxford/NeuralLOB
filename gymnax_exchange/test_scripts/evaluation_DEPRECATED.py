@@ -15,7 +15,7 @@ sys.path.append('/homes/80/kang/AlphaTrade')
 from gymnax_exchange.jaxrl.ppoS5ExecCont import ActorCriticS5
 from gymnax_exchange.jaxrl.ppoS5ExecCont import StackedEncoderModel, ssm_size, n_layers
 from purejaxrl.experimental.s5.s5 import StackedEncoderModel, init_S5SSM, make_DPLR_HiPPO
-from gymnax_exchange.jaxen.exec_env_old import *
+from AlphaTrade.gymnax_exchange.jaxen.old.exec_env_old import *
 
 ppo_config = {    
     "ENV_NAME": "alphatradeExec-v0",

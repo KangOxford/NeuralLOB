@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import dataclasses
 from gymnax_exchange.jaxen.exec_env import ExecutionEnv
-from gymnax_exchange.jaxrl.ppo import Transition
+from gymnax_exchange.jaxrl.ppo_mm import Transition
 from purejaxrl.wrappers import FlattenObservationWrapper, LogWrapper, ClipAction, VecEnv, NormalizeVecObservation, NormalizeVecReward
 
 

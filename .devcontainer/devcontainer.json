@@ -1,0 +1,19 @@
+{
+    "name": "Python Container",
+    "context": "..",
+    "dockerFile": "../Dockerfile",
+    "workspaceFolder": "/homes/80/reuben/AlphaTrade",
+    "postCreateCommand": "pip install -r /homes/80/reuben/AlphaTrade/docs/requirements.txt || true",
+    "settings": {
+        "python.pythonPath": "/usr/local/bin/python"
+    },
+    "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter"
+    ],
+    "remoteEnv": {
+        "DEVCONTAINERS_LOG_LEVEL": "trace"
+    },
+    "remoteUser": "duser"
+}

@@ -79,8 +79,8 @@ if __name__ == "__main__":
                 "TASKSIDE":'sell'
             }
         import flax
-        from gymnax_exchange.jaxrl.ppo import ActorCriticRNN
-        from gymnax_exchange.jaxrl.ppo import ScannedRNN
+        from gymnax_exchange.jaxrl.ppo_mm import ActorCriticRNN
+        from gymnax_exchange.jaxrl.ppo_mm import ScannedRNN
         network = ActorCriticRNN(env.action_space(env_params).shape[0], config=ppo_config)
         init_hstate = ScannedRNN.initialize_carry(ppo_config["NUM_ENVS"], 128)
         

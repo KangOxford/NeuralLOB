@@ -12,6 +12,8 @@
 **/wandb/**
 /gym_exchange/outputs/**
 
+jax_rwkv/**
+
 gym_exchange/.DS_Store
 gym_exchange/data_orderbook_adapter/.DS_Store
 gym_exchange/orderbook/.DS_Store
@@ -38,6 +40,7 @@ re_2.ipynb
 params_file**
 note.md
 results_file**
+
 *.png
 *.npy
 *.nfs*
