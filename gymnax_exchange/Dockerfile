@@ -25,7 +25,7 @@ RUN useradd -u $UID --create-home duser && \
 
 # Switch to non-root user and configure git
 USER duser
-WORKDIR /home/duser/
+WORKDIR /home/duser/AlphaTrade
 RUN git config --global user.email "reuben@robots.ox.ac.uk"
 RUN git config --global user.name "reuben"
 RUN echo "alias i='/usr/local/bin/ipython'" >> ~/.bashrc

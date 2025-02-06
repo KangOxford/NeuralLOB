@@ -174,7 +174,7 @@ class MarketMakingEnv(BaseLOBEnv):
         self.market_share=0.
         self.rewardLambda = rewardLambda #
         # TODO: fix!! this can be overwritten in the base class
-        self.n_actions = 8 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
+        self.n_actions = 4 # 4: (FT, M, NT, PP), 3: (FT, NT, PP), 2 (FT, NT), 1 (FT)
         
         super().__init__(
             alphatradePath,
@@ -338,8 +338,8 @@ class MarketMakingEnv(BaseLOBEnv):
         #jax.debug.print("inventory:{}",state.inventory)
         #jax.debug.print("reward :{}",reward)
         #jax.debug.print("done:{}",done)
-        average_best_bid=bestbids[:, 0].mean()// self.tick_size * self.tick_size
-        average_best_ask=bestasks[:, 0].mean()// self.tick_size * self.tick_size
+        average_best_bid= jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
+        average_best_ask = jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)
         #jax.debug.print("average_best_bid:{}",average_best_bid)
         #jax.debug.print("average_best_ask:{}",average_best_ask)
 
@@ -350,8 +350,6 @@ class MarketMakingEnv(BaseLOBEnv):
             "current_step": state.step_counter,
             "done": done,
             "inventory": state.inventory,
-            #"mkt_forced_quant": mkt_exec_quant + doom_quant,
-            #"doom_quant": doom_quant,
             "market_share":extras["market_share"],
             "buyQuant":extras["buyQuant"],
             "sellQuant":extras["sellQuant"],
@@ -1152,10 +1150,10 @@ class MarketMakingEnv(BaseLOBEnv):
        
 
         # Other versions of reward
-        #reward=buyPnL+sellPnL +InventoryPnL # full speculation
+        #reward=buyPnL+sellPnL+InventoryPnL # full speculation
         #reward=buyPnL+sellPnL -jnp.abs(state.inventory)
         undamped_reward=buyPnL+sellPnL+InventoryPnL
-        #reward=buyPnL+sellPnL-jnp.abs(state.inventory//10)
+       # reward=buyPnL+sellPnL-jnp.abs(state.inventory//10)
         #reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL//1000) # Asymmetrically dampened PnL
         #jax.debug.print("reward:{}",reward)
         #More complex reward function (should be added as part of the env if we actually use them):
@@ -1177,9 +1175,9 @@ class MarketMakingEnv(BaseLOBEnv):
         
 
         # Define a penalty if he exceeds a certain inventory
-        penalty_threshold = 100.0
-        penalty_amount = 500.0 
-        penalty = jnp.where(jnp.abs(state.inventory) > penalty_threshold, penalty_amount, 0.0)
+       # penalty_threshold = 100.0
+       # penalty_amount = 500.0 
+       # penalty = jnp.where(jnp.abs(state.inventory) > penalty_threshold, penalty_amount, 0.0)
         #reward = reward - penalty
         
         
@@ -1230,27 +1228,28 @@ class MarketMakingEnv(BaseLOBEnv):
         time = state.time[0] + state.time[1]/1e9
         time_elapsed = time - (state.init_time[0] + state.init_time[1]/1e9)
         obs = {
-            "p_bid" : state.best_bids[-1][0],  
-            "p_ask": state.best_asks[-1][0], 
-            "p_bid_passive" :  state.bid_passive_2,
-            "p_ask_passive" :  state.ask_passive_2,
+            "p_bid" : jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size),#state.best_bids[-1][0],  
+            "p_ask": jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size,),#state.best_asks[-1][0], 
+            #"p_bid_passive" :  state.bid_passive_2,
+            #"p_ask_passive" :  state.ask_passive_2,
             "spread": jnp.abs(state.best_asks[-1][0] - state.best_bids[-1][0]),
+            #"average_spread":jnp.abs(jnp.int32((state.best_asks[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size,)-jnp.int32((state.best_bids[-100:].mean(axis=0)[0] // self.tick_size) * self.tick_size)),
             "q_bid": state.best_bids[-1][1],
             "q_ask": state.best_asks[-1][1],
-            "q_bid_passive": state.quant_bid_passive_2,
-            "q_ask_passive" : state.quant_ask_passive_2,
+            #"q_bid_passive": state.quant_bid_passive_2,
+            #"q_ask_passive" : state.quant_ask_passive_2,
             # "q_before2": None, # how much quantity lies above this price level
             "time": time,
             "delta_time": state.delta_time,
             # "episode_time": state.time - state.init_time,
             "time_remaining": params.episode_time - time_elapsed,
             "inventory" : state.inventory,
-            "init_price": state.init_price,
+            #"init_price": state.init_price,
             "mid_price":state.mid_price,
             "total_PnL" : state.total_PnL,
             "step_counter": state.step_counter,
             "max_steps": state.max_steps_in_episode,
-            "remaining_ratio": jnp.where(state.max_steps_in_episode==0, 0., 1. - state.step_counter / state.max_steps_in_episode),
+            #"remaining_ratio": jnp.where(state.max_steps_in_episode==0, 0., 1. - state.step_counter / state.max_steps_in_episode),
             "prev_action": state.prev_action,  # use quants only
             "prev_executed": state.prev_executed,  # use quants only
             "prev_executed_ratio": jnp.where(state.prev_action==0., 0., state.prev_executed /10)# state.prev_action[:, 1]), Hard code size of normal trade
@@ -1265,19 +1264,19 @@ class MarketMakingEnv(BaseLOBEnv):
         means = {
             "p_bid": state.mid_price,
             "p_ask": state.mid_price,
-            "p_bid_passive" :  state.mid_price,
-            "p_ask_passive" :  state.mid_price,
+            #"p_bid_passive" :  state.mid_price,
+            #"p_ask_passive" :  state.mid_price,
             "spread": 0,
             "q_bid": 0,
             "q_ask": 0,
-            "q_bid_passive": 0,
-            "q_ask_passive" : 0,
+            #"q_bid_passive": 0,
+            #"q_ask_passive" : 0,
             "time": 0,
             "delta_time": 0,
             # "episode_time": jnp.array([0, 0]),
             "time_remaining": 0,
             "inventory" : 0,
-            "init_price": 0, #p_mean,
+            #"init_price": 0, #p_mean,
             "mid_price":0,
             "total_PnL" : 0,
             #"task_size": 0,
@@ -1285,7 +1284,7 @@ class MarketMakingEnv(BaseLOBEnv):
             #"remaining_quant": 0,
             "step_counter": 0,
             "max_steps": 0,
-            "remaining_ratio": 0,
+            #"remaining_ratio": 0,
             "prev_action": 0,
             "prev_executed": 0,
            "prev_executed_ratio": 0,
@@ -1295,18 +1294,18 @@ class MarketMakingEnv(BaseLOBEnv):
             #"is_sell_task": 1,
             "p_bid": 1e5, #p_std,
             "p_ask": 1e5, #p_std,
-            "p_bid_passive" :  1e5,
-            "p_ask_passive" : 1e5,
+            #"p_bid_passive" :  1e5,
+            #"p_ask_passive" : 1e5,
             "spread": 1e4,
             "q_bid": 100,
             "q_ask": 100,
-            "q_bid_passive": 100,
-            "q_ask_passive" : 100,
+            #"q_bid_passive": 100,
+            #"q_ask_passive" : 100,
             "time": 1e5,
             "delta_time": 10,
             # "episode_time": jnp.array([1e3, 1e9]),
             "time_remaining": self.sliceTimeWindow, # 10 minutes = 600 seconds
-            "init_price": 1e7, #p_std,
+            #"init_price": 1e7, #p_std,
             "mid_price": 1e7, #p_std,
             "inventory" : 100,
             "total_PnL" : 100,
@@ -1315,7 +1314,7 @@ class MarketMakingEnv(BaseLOBEnv):
            # "remaining_quant": self.max_task_size,
             "step_counter": 30,  # TODO: find way to make this dependent on episode length
             "max_steps": 30,
-            "remaining_ratio": 1,
+            #"remaining_ratio": 1,
             "prev_action": 10,
             "prev_executed": 10,
             "prev_executed_ratio": 1,
@@ -1429,7 +1428,7 @@ class MarketMakingEnv(BaseLOBEnv):
         """Observation space of the environment."""
         #space = spaces.Box(-10,10,(809,),dtype=jnp.float32) 
         # space = spaces.Box(-10, 10, (21,), dtype=jnp.float32) 
-        space = spaces.Box(-10, 10, (29,), dtype=jnp.float32) 
+        space = spaces.Box(-10, 10, (23,), dtype=jnp.float32) 
         return space
 
     def state_space(self, params: EnvParams) -> spaces.Dict:

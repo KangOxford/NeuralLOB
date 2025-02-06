@@ -4,6 +4,7 @@ import os
 sys.path.append(os.path.abspath('/home/duser/AlphaTrade')) 
 import jax.numpy as jnp
 import flax.linen as nn
+import datetime
 import numpy as np
 import optax
 import time
@@ -395,6 +396,7 @@ def make_train(config):
 
 
 if __name__ == "__main__":
+    timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
         "NUM_ENVS": 4,

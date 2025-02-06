@@ -5,6 +5,7 @@ sys.path.append(os.path.abspath('/home/duser/AlphaTrade'))
 from gymnax_exchange.jaxen.mm_env import MarketMakingEnv
 import jax.numpy as jnp
 import flax
+import datetime
 import flax.linen as nn
 import numpy as np
 import optax
@@ -410,6 +411,7 @@ def make_train(config):
 
 
 if __name__ == "__main__":
+    
     timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
@@ -472,7 +474,7 @@ if __name__ == "__main__":
     # +++++ Single GPU +++++
     rng = jax.random.PRNGKey(0)
     # rng = jax.random.PRNGKey(30)
-    train_jit = jax.jit(make_train(config))
+    train_jit = jax.jit(make_train(config_mm))
  
     out = train_jit(rng)
   
