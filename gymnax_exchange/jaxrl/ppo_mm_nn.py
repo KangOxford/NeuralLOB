@@ -354,7 +354,7 @@ if __name__ == "__main__":
         "LR": 2.5e-4,
         "NUM_ENVS": 256,#256
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 4e6, #4e6 converges.
+        "TOTAL_TIMESTEPS": 1e6, #4e6 converges.
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16,#16
         "GAMMA": 0.99,
@@ -373,7 +373,7 @@ if __name__ == "__main__":
         "ACTION_TYPE": "pure", # "delta"
         "MAX_TASK_SIZE": 100,
         #"TASK_SIZE": 100, # 500,
-        "EPISODE_TIME": 60 *60*3, # time in seconds
+        "EPISODE_TIME": 60 *3, # time in seconds
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"
         "ATFOLDER": "/home/duser/AlphaTrade/training_oneDay"
     }

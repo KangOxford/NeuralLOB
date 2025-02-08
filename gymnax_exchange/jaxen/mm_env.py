@@ -292,10 +292,12 @@ class MarketMakingEnv(BaseLOBEnv):
        # (asks, bids, trades), (new_bestask, new_bestbid), new_id_counter, new_time, mkt_exec_quant, doom_quant = \
         #    self._force_market_order_if_done(
         #         bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
+        (asks, bids, trades), new_id_counter, new_time=self._trade_at_midprice(
+            bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
         bestasks = jnp.concatenate([bestasks,bestasks[-1:,:] ], axis=0, dtype=jnp.int32)
         bestbids = jnp.concatenate([bestbids, bestbids[-1:,:]], axis=0, dtype=jnp.int32)
-        new_id_counter = state.customIDcounter + 3#self.n_actions + 1
-        new_time = time + params.time_delay_obs_act
+        #new_id_counter = state.customIDcounter + self.n_actions + 1
+        #new_time = time + params.time_delay_obs_act
 
         bid_passive_2,quant_bid_passive_2,ask_passive_2,quant_ask_passive_2 = self._get_pass_price_quant(state)
         # TODO: consider adding quantity before (in priority) to each price / level
@@ -863,6 +865,7 @@ class MarketMakingEnv(BaseLOBEnv):
             params: EnvParams,
         ) -> Tuple[Tuple[jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array], int, int, int, int]:
         """WIP; WILL MAKE IT SO THE AGENT JUST SELLS ALL AT MID PRICE. NEEDS SOME WORK!!"""
+      
         executed = jnp.where((trades[:, 0] >= 0)[:, jnp.newaxis], trades, 0)
              
         # Mask to keep only the trades where the RL agent is involved, apply mask.
@@ -892,26 +895,33 @@ class MarketMakingEnv(BaseLOBEnv):
             ep_is_over = remainingTime <= 5  # 5 seconds
         else:
             ep_is_over = state.max_steps_in_episode - state.step_counter <= 1
-        mid_price= (bestbid+bestask)//(2*self.tick_size)* self.tick_size
-       
+        mid_price= (bestbid[0]+bestask[0])//(2*self.tick_size)* self.tick_size
+        #jax.debug.print("mid_price:{}",mid_price)
+        
+        new_time = time + params.time_delay_obs_act
 
         def place_midprice_trade(trades, price, quant, time):
             '''Place a doom trade at a trade at mid price to close out our mm agent at the end of the episode.'''
             mid_trade = job.create_trade(
                 price, quant, -666666,  self.trader_unique_id + state.customIDcounter+ 1 +self.n_actions, *time, -666666, self.trader_unique_id)
             trades = job.add_trade(trades, mid_trade)
+            jax.debug.print("called?")
             return trades
         
         trades = jax.lax.cond(
             ep_is_over & (jnp.abs(new_inventory) > 0),  # Check if episode is over and we still have remaining quantity
-            place_midprice_trade,  # Place amidprice trade
+            place_midprice_trade,  # Place a midprice trade
             lambda trades, b, c, d: trades,  # If not, return the existing trades
-            trades, mid_price, jnp.sign(state.inventory) * state.inventory, time  # Inv +ve means incoming is sell so standing buy.
-        )#jnp.sign(state.inventory) * quant_still_left
+            trades, mid_price, jnp.sign(state.inventory) * state.inventory, new_time  # Inv +ve means incoming is sell so standing buy.
+        )
+        #jax.debug.print("trades :{}",trades)
 
         next_id = state.customIDcounter + self.n_actions + 1
+        id_counter=next_id
+        time=new_time
         
-        return (asks, bids, trades), (bestask, bestbid), id_counter, time, mkt_exec_quant, doom_quant
+
+        return (asks, bids, trades),  id_counter, time
     
     
     def _force_market_order_if_done(
@@ -1154,7 +1164,7 @@ class MarketMakingEnv(BaseLOBEnv):
         #reward=buyPnL+sellPnL -jnp.abs(state.inventory)
         undamped_reward=buyPnL+sellPnL+InventoryPnL
        # reward=buyPnL+sellPnL-jnp.abs(state.inventory//10)
-        #reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL//1000) # Asymmetrically dampened PnL
+        reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL//100) # Asymmetrically dampened PnL
         #jax.debug.print("reward:{}",reward)
         #More complex reward function (should be added as part of the env if we actually use them):
         inventoryPnL_lambda = 0.002
@@ -1171,7 +1181,7 @@ class MarketMakingEnv(BaseLOBEnv):
   
         #reward = approx_realized_pnl + unrealizedPnL_lambda * approx_unrealized_pnl +  inventoryPnL_lambda * jnp.minimum(InventoryPnL,InventoryPnL*asymmetrically_dampened_lambda) #Last term adds negative inventory PnL without dampening
        
-        reward= -jnp.abs(new_inventory)
+        #reward= -jnp.abs(new_inventory)
         
 
         # Define a penalty if he exceeds a certain inventory
@@ -1504,14 +1514,15 @@ if __name__ == "__main__":
     
 
     # print(env_params.message_data.shape, env_params.book_data.shape)
-    for i in range(1,15):
+    for i in range(1,15000):
          # ==================== ACTION ====================
         # ---------- acion from random sampling ----------
         print("-"*20)
         key_policy, _ = jax.random.split(key_policy, 2)
         key_step, _ = jax.random.split(key_step, 2)
         #test_action=env.action_space().sample(key_policy)
-        test_action = env.action_space().sample(key_policy) 
+        #test_action = env.action_space().sample(key_policy) 
+        test_action=1
         jax.debug.print("test_action :{}",test_action)
         #test_action=0
         #env.action_space().sample(key_policy) // 10

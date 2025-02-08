@@ -399,11 +399,11 @@ if __name__ == "__main__":
     timestamp=datetime.datetime.now().strftime("%m-%d_%H-%M")
     config = {
         "LR": 2.5e-4,
-        "NUM_ENVS": 4,
+        "NUM_ENVS": 256,
         "NUM_STEPS": 128,
-        "TOTAL_TIMESTEPS": 5e5,
+        "TOTAL_TIMESTEPS": 4e6,
         "UPDATE_EPOCHS": 4,
-        "NUM_MINIBATCHES": 4,
+        "NUM_MINIBATCHES": 16,
         "GAMMA": 0.99,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
@@ -415,7 +415,7 @@ if __name__ == "__main__":
         "DEBUG": True,
         
         "TASKSIDE": "random", # "random", "buy", "sell"
-        "REWARD_LAMBDA": 1., #0.001,
+        "REWARD_LAMBDA": 0.001, #0.001,
         "ACTION_TYPE": "pure", # "delta"
         "WINDOW_INDEX": 200, # 2 fix random episode #-1,
         "MAX_TASK_SIZE": 100,
