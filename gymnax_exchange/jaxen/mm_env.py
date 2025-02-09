@@ -292,12 +292,12 @@ class MarketMakingEnv(BaseLOBEnv):
        # (asks, bids, trades), (new_bestask, new_bestbid), new_id_counter, new_time, mkt_exec_quant, doom_quant = \
         #    self._force_market_order_if_done(
         #         bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
-        (asks, bids, trades), new_id_counter, new_time=self._trade_at_midprice(
-            bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
+        #(asks, bids, trades), new_id_counter, new_time=self._trade_at_midprice(
+        #    bestasks[-1], bestbids[-1], time, asks, bids, trades, state, params)
         bestasks = jnp.concatenate([bestasks,bestasks[-1:,:] ], axis=0, dtype=jnp.int32)
         bestbids = jnp.concatenate([bestbids, bestbids[-1:,:]], axis=0, dtype=jnp.int32)
-        #new_id_counter = state.customIDcounter + self.n_actions + 1
-        #new_time = time + params.time_delay_obs_act
+        new_id_counter = state.customIDcounter + self.n_actions + 1
+        new_time = time + params.time_delay_obs_act
 
         bid_passive_2,quant_bid_passive_2,ask_passive_2,quant_ask_passive_2 = self._get_pass_price_quant(state)
         # TODO: consider adding quantity before (in priority) to each price / level
@@ -888,7 +888,9 @@ class MarketMakingEnv(BaseLOBEnv):
 
         #Calculate the change in inventory & the new inventory
         inventory_delta = buyQuant - sellQuant
+       # jax.debug.print("inventory_delta:{}",inventory_delta)
         new_inventory=state.inventory+inventory_delta
+        
         #-----check if ep over-----#
         if self.ep_type == 'fixed_time':
             remainingTime = params.episode_time - jnp.array((time - state.init_time)[0], dtype=jnp.int32)
@@ -900,19 +902,26 @@ class MarketMakingEnv(BaseLOBEnv):
         
         new_time = time + params.time_delay_obs_act
 
+        is_sell_task = jnp.where(new_inventory > 0, 1, 0)
+        doom_price = jax.lax.cond(
+            is_sell_task,
+            lambda: ((bestbid[0]) // self.tick_size * self.tick_size).astype(jnp.int32),
+            lambda: (( bestask[0]) // self.tick_size * self.tick_size).astype(jnp.int32),
+        )
+
         def place_midprice_trade(trades, price, quant, time):
             '''Place a doom trade at a trade at mid price to close out our mm agent at the end of the episode.'''
             mid_trade = job.create_trade(
                 price, quant, -666666,  self.trader_unique_id + state.customIDcounter+ 1 +self.n_actions, *time, -666666, self.trader_unique_id)
             trades = job.add_trade(trades, mid_trade)
-            jax.debug.print("called?")
+            #jax.debug.print("called?")
             return trades
         
         trades = jax.lax.cond(
             ep_is_over & (jnp.abs(new_inventory) > 0),  # Check if episode is over and we still have remaining quantity
             place_midprice_trade,  # Place a midprice trade
             lambda trades, b, c, d: trades,  # If not, return the existing trades
-            trades, mid_price, jnp.sign(state.inventory) * state.inventory, new_time  # Inv +ve means incoming is sell so standing buy.
+            trades, doom_price, jnp.sign(new_inventory) * new_inventory, new_time  # Inv +ve means incoming is sell so standing buy.
         )
         #jax.debug.print("trades :{}",trades)
 
@@ -939,9 +948,6 @@ class MarketMakingEnv(BaseLOBEnv):
         """ Force a market order if episode is over (either in terms of time or steps).
          Cancel all agent trades and place a market trade. If this is unmatched, cancel any remaing volume
           and place an artificial trade at a bad price. """
-        
-        
-        
         
         def create_mkt_order():
             '''Create a market order by either placing a limit
@@ -1104,8 +1110,6 @@ class MarketMakingEnv(BaseLOBEnv):
 
     def _get_reward(self, state: EnvState, params: EnvParams, trades: chex.Array,bestasks :chex.Array, bestbids: chex.Array) -> jnp.int32:
         '''Return the reward. There are a few options for reward funciton and assocaited hyper parameters:
-        
-        
         '''
         # ====================get reward and revenue ==========================================#
         # Gather the 'trades' that are nonempty, make the rest 0
@@ -1125,8 +1129,6 @@ class MarketMakingEnv(BaseLOBEnv):
         agent_buys=jnp.where(mask_buy[:, jnp.newaxis], agentTrades, 0)
         agent_sells=jnp.where(mask_sell[:, jnp.newaxis], agentTrades, 0)
 
-
-
         #Find amount bought and sold in the step
         buyQuant=jnp.abs(agent_buys[:, 1]).sum()
         sellQuant=jnp.abs(agent_sells[:, 1]).sum()
@@ -1138,7 +1140,6 @@ class MarketMakingEnv(BaseLOBEnv):
         inventory_delta = buyQuant - sellQuant
         new_inventory=state.inventory+inventory_delta
 
-       
         #Find the new obsvered mid price at the end of the step.
         #Note: to make integer of tick_size // is integer division.
         mid_price_end = (bestbids[-1][0] + bestasks[-1][0]) // 2 // self.tick_size * self.tick_size
@@ -1155,16 +1156,17 @@ class MarketMakingEnv(BaseLOBEnv):
 
         #Lamda weighted, non directional#
         # Multiply PnL from inventory with small lambda to dampen the effect
-        #reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
+        # reward=buyPnL+sellPnL + self.rewardLambda * InventoryPnL # Symmetrically dampened PnL
 
        
 
         # Other versions of reward
-        #reward=buyPnL+sellPnL+InventoryPnL # full speculation
+        reward=buyPnL+sellPnL
         #reward=buyPnL+sellPnL -jnp.abs(state.inventory)
         undamped_reward=buyPnL+sellPnL+InventoryPnL
+        scaledInventoryPnL=10*InventoryPnL//(new_inventory+1)
        # reward=buyPnL+sellPnL-jnp.abs(state.inventory//10)
-        reward=buyPnL+sellPnL + InventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,InventoryPnL//100) # Asymmetrically dampened PnL
+        #reward= buyPnL + sellPnL + scaledInventoryPnL - (1-self.rewardLambda)*jnp.maximum(0,scaledInventoryPnL) # Asymmetrically dampened PnL
         #jax.debug.print("reward:{}",reward)
         #More complex reward function (should be added as part of the env if we actually use them):
         inventoryPnL_lambda = 0.002

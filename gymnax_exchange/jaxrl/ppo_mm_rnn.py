@@ -371,8 +371,8 @@ def make_train(config):
                             },
                             commit=True
                         )
-                    #for t in range(len(timesteps)):
-                        #print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
+                    for t in range(len(timesteps)):
+                        print(f"global step={timesteps[t]}, episodic return={return_values[t]}")
                 jax.debug.callback(callback, metric)
 
             runner_state = (train_state, env_state, last_obs, last_done, hstate, rng)
@@ -404,7 +404,7 @@ if __name__ == "__main__":
         "TOTAL_TIMESTEPS": 4e6,
         "UPDATE_EPOCHS": 4,
         "NUM_MINIBATCHES": 16,
-        "GAMMA": 0.99,
+        "GAMMA": 0.9999,
         "GAE_LAMBDA": 0.95,
         "CLIP_EPS": 0.2,
         "ENT_COEF": 0.,
@@ -417,7 +417,7 @@ if __name__ == "__main__":
         "TASKSIDE": "random", # "random", "buy", "sell"
         "REWARD_LAMBDA": 0.001, #0.001,
         "ACTION_TYPE": "pure", # "delta"
-        "WINDOW_INDEX": 200, # 2 fix random episode #-1,
+        "WINDOW_INDEX": 87, # 2 fix random episode #-1,
         "MAX_TASK_SIZE": 100,
         "EPISODE_TIME": 60 * 5, # time in seconds
         "DATA_TYPE": "fixed_time", # "fixed_time", "fixed_steps"

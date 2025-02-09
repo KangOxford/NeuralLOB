@@ -18,7 +18,7 @@ faulthandler.enable()
 # ============================
 # Configuration
 # ============================
-test_steps = 1500 # Adjusted for your test case; make sure this isn't too high
+test_steps = 15000 # Adjusted for your test case; make sure this isn't too high
 
 if __name__ == "__main__":
     try:
